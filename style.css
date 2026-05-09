@@ -173,3 +173,30 @@ aside {
   border-color: #c0cab8;
   box-shadow: 0 0 10px rgba(192,202,184,.18);
 }
+
+
+.mapButton {
+  position: absolute;
+  z-index: 10;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-105%);
+  background: rgba(5,8,6,.78);
+  border: 1px solid rgba(217,227,211,.42);
+  border-radius: 8px;
+  color: #c0cab8;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 13px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.mapButton.info {
+  transform: translateX(8%);
+  color: #d9aa2a;
+}
+
+.mapButton.on {
+  border-color: currentColor;
+  box-shadow: 0 0 10px rgba(192,202,184,.18);
+}

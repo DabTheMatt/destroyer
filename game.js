@@ -21,6 +21,8 @@ const courseRead = document.getElementById("courseRead");
 const weaponRead = document.getElementById("weaponRead");
 const windShort = document.getElementById("windShort");
 const windLayerButton = document.getElementById("windLayerButton");
+const aimInfoButton = document.getElementById("aimInfoButton");
+const windLayerButton = document.getElementById("windLayerButton");
 
 const WORLD_W = 30000;
 const WORLD_H = 30000;
@@ -154,6 +156,12 @@ function makeCondor(i = 0) {
 
 const drag = { active: false, lastX: 0, lastY: 0 };
 
+const underwaterTargets = Array.from({ length: 3 }, () => randomSubmergedTarget());
+const wrecks = [];
+let aimInfoOn = true;
+let wakeBuild = 0;
+
+
 resizeAll();
 bindEvents();
 requestAnimationFrame(loop);
@@ -163,6 +171,8 @@ requestAnimationFrame(loop);
 function bindEvents() {
   window.addEventListener("resize", resizeAll);
   sonarButton.addEventListener("click", toggleSonar);
+  if (windLayerButton) windLayerButton.addEventListener("click", toggleWindLayer);
+  if (aimInfoButton) aimInfoButton.addEventListener("click", toggleAimInfo);
   windLayerButton.addEventListener("click", toggleWindLayer);
 
   game.addEventListener("wheel", (event) => {
@@ -404,6 +414,20 @@ function toggleWindLayer() {
   windLayerButton.classList.toggle("on", windLayerOn);
 }
 
+
+function toggleWindLayer() {
+  if (typeof windLayerOn === "undefined") return;
+  windLayerOn = !windLayerOn;
+  windLayerButton.textContent = windLayerOn ? "WIATR: WŁ." : "WIATR: WYŁ.";
+  windLayerButton.classList.toggle("on", windLayerOn);
+}
+
+function toggleAimInfo() {
+  aimInfoOn = !aimInfoOn;
+  aimInfoButton.textContent = aimInfoOn ? "INFO: WŁ." : "INFO: WYŁ.";
+  aimInfoButton.classList.toggle("on", aimInfoOn);
+}
+
 // ---------- GAME STATE ----------
 
 function randomTarget() {
@@ -417,6 +441,20 @@ function randomTarget() {
     heading: Math.random() * Math.PI * 2,
     radius: 70,
     alive: true
+  };
+}
+
+function randomSubmergedTarget() {
+  const d = 1800 + Math.random() * 3800;
+  const a = Math.random() * Math.PI * 2;
+  return {
+    x: (ship.x + Math.cos(a) * d + WORLD_W) % WORLD_W,
+    y: (ship.y + Math.sin(a) * d + WORLD_H) % WORLD_H,
+    heading: Math.random() * Math.PI * 2,
+    speed: 1.6 + Math.random() * 1.8,
+    depth: 45 + Math.random() * 80,
+    alive: true,
+    radius: 42
   };
 }
 
@@ -526,7 +564,8 @@ function updatePhysics(dt) {
   ship.x = (ship.x + WORLD_W) % WORLD_W;
   ship.y = (ship.y + WORLD_H) % WORLD_H;
 
-  addWakeSample();
+  wakeBuild = clamp(wakeBuild + (Math.abs(ship.speed) > 0.5 ? 0.7 : -1.2) * dt, 0, 1);
+  if (wakeBuild > 0.05) addWakeSample();
   addSmokeSample(dt);
 }
 
@@ -626,15 +665,44 @@ function updateAATracers(dt) {
   }
 }
 
+function updateSubmergedTargets(dt) {
+  for (const sub of underwaterTargets) {
+    if (!sub.alive) continue;
+    sub.x += Math.cos(sub.heading) * sub.speed * dt * 5;
+    sub.y += Math.sin(sub.heading) * sub.speed * dt * 5;
+    sub.x = (sub.x + WORLD_W) % WORLD_W;
+    sub.y = (sub.y + WORLD_H) % WORLD_H;
+    if (Math.random() < dt * 0.035) sub.heading += (Math.random() - 0.5) * 0.5;
+  }
+}
+
+function nearestSonarContact() {
+  let best = null;
+  let bestD = Infinity;
+  for (const sub of underwaterTargets) {
+    if (!sub.alive) continue;
+    const d = dist(ship, sub);
+    if (d < sonar.minRange || d > sonar.range) continue;
+    const bearingToSub = angleToPoint(ship, sub);
+    const sonarWorldBearing = sonar.bearing + ship.heading;
+    const diff = Math.abs(angleDiffRad(bearingToSub, sonarWorldBearing));
+    if (diff <= sonar.beamWidth / 2 && d < bestD) {
+      best = sub;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
 function updateSonar(dt) {
   sonar.pingCooldown -= dt;
   sonar.contactToneCooldown -= dt;
   if (!sonar.on) return;
 
-  const contact = target.alive && dist(ship, target) <= sonar.range && dist(ship, target) >= sonar.minRange;
+  const contact = nearestSonarContact();
   if (sonar.pingCooldown <= 0) {
     sonarPulses.push({ x: ship.x, y: ship.y, angle: sonar.bearing + ship.heading, t: 0 });
-    sonarPing(contact);
+    sonarPing(!!contact);
     sonar.pingCooldown = 2.4;
   }
 
@@ -695,10 +763,11 @@ function updateProjectiles(dt) {
     shell.z = Math.sin(p * Math.PI) * 260;
 
     if (p >= 1) {
-      const hit = target.alive && Math.hypot(shell.endX - target.x, shell.endY - target.y) < target.radius + 90;
+      const hit = target.alive && Math.hypot(shell.endX - target.x, shell.endY - target.y) < 38;
       splashes.push({ x: shell.endX, y: shell.endY, t: 0, maxT: hit ? 1.4 : 1.0, hit });
 
       if (hit) {
+        wrecks.push({ x: target.x, y: target.y, heading: target.heading, length: target.length, beam: target.beam, t: 0 });
         target.alive = false;
         targetRespawnTimer = 10;
         lastMessage = "Trafienie! Nowy cel za 10 sekund.";
@@ -780,7 +849,10 @@ function drawMain() {
 
   drawOcean();
   drawTacticalOverlays();
+  drawAimInfo();
+  drawWrecks();
   drawTarget();
+  drawSubmergedTargetsDebug();
   drawSensorEffects();
   drawEffects();
   drawAircraft();
@@ -892,7 +964,7 @@ function drawWake() {
     const spread = (15 + mark.t * 4) / METERS_PER_PIXEL;
 
     ctx.globalAlpha = 0.26 * life * mark.intensity;
-    ctx.strokeStyle = "rgba(235,245,235,.95)";
+    ctx.strokeStyle = "rgba(220,235,225,.42)";
     ctx.lineWidth = Math.max(0.8, 2.0 * life);
 
     ctx.save();
@@ -1012,6 +1084,7 @@ function drawWindLayer() {
 function drawTacticalOverlays() {
   drawRangeCircles();
   drawCourseDeviationArc();
+      drawPredictedTrack();
   drawPredictedTrack();
 
   if (ship.orderedCourse !== null) {
@@ -1213,6 +1286,55 @@ function drawSensorEffects() {
     ctx.lineWidth = 2.2;
     ctx.beginPath();
     ctx.arc(sp.x, sp.y, 8 + echo.t * 34, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawWrecks() {
+  for (const wr of wrecks) {
+    const p = worldToScreen(wr);
+    const scale = 1 / METERS_PER_PIXEL;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(wr.heading);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = 0.62;
+    ctx.strokeStyle = "#cfc3a2";
+    ctx.fillStyle = "rgba(90,75,55,.45)";
+    ctx.lineWidth = METERS_PER_PIXEL * 1.1;
+    ctx.beginPath();
+    ctx.moveTo(wr.length/2, 0);
+    ctx.lineTo(wr.length/2-18, -wr.beam/2);
+    ctx.lineTo(-wr.length/2, -wr.beam/2);
+    ctx.lineTo(-wr.length/2, wr.beam/2);
+    ctx.lineTo(wr.length/2-18, wr.beam/2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-wr.length/2, -wr.beam/2);
+    ctx.lineTo(wr.length/2, wr.beam/2);
+    ctx.moveTo(-wr.length/2, wr.beam/2);
+    ctx.lineTo(wr.length/2, -wr.beam/2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawSubmergedTargetsDebug() {
+  // Bardzo subtelne kreski tylko jako pomoc w prototypie — w grze później ukryjemy bez wykrycia.
+  for (const sub of underwaterTargets) {
+    if (!sub.alive) continue;
+    const p = worldToScreen(sub);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(sub.heading);
+    ctx.globalAlpha = 0.20;
+    ctx.strokeStyle = "#6fe25d";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 18, 4, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
@@ -1631,7 +1753,7 @@ function updateUI() {
   consolePanel.textContent =
     `TRYB WPISYWANIA: ${inputMode === "AIM" ? "KĄT CELOWANIA" : "KURS OKRĘTU"}  |  WPIS: ${inputMode === "AIM" ? (angleInput || "---") : (courseInput || "---")}  |  SONAR ${sonar.on ? "WŁ." : "WYŁ."}  |  WIĄZKA QC 14°  |  RADAR ${radar.range} m  |  DZIAŁA ${guns.minRange}-${guns.maxRange} m\n` +
     `PRĘDKOŚĆ: ${(ship.speed * MS_TO_KNOT).toFixed(1)} w.  |  BŁĄD CEL.: ${miss} m  |  NOWY CEL: ${respawn}  |  ZOOM: ${zoom.toFixed(2)}x  |  SKALA: 1px=${METERS_PER_PIXEL.toFixed(1)}m  |  ${lastMessage}\n` +
-    `W/S prędkość także WSTECZ, A/D ster, Z zero, X stop, G wpis KURS/KĄT, F AUTO/MANUAL, < > obrót, O/L zasięg, [ ] sonar, Spacja strzał, guzik WIATR`;
+    `W/S prędkość także WSTECZ, A/D ster, Z zero, X stop, G wpis KURS/KĄT, F AUTO/MANUAL, < > obrót, O/L zasięg, [ ] sonar, Spacja strzał, INFO wł./wył., guzik WIATR`;
 }
 
 // ---------- LOOP ----------
@@ -1646,6 +1768,7 @@ function loop(now) {
   updatePhysics(dt);
   updateWakeAndSmoke(dt);
   updateAircraft(dt);
+  updateSubmergedTargets(dt);
   updateSonar(dt);
   updateRadar(dt);
   updateProjectiles(dt);

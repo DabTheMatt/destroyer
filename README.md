@@ -1,9 +1,10 @@
-# U-Booty i Niszczyciele — v4
+# U-Booty i Niszczyciele — v5
 
-Zmiany w v4:
-- warstwa wiatru na mapie: ruchome strzałki zgodne z kierunkiem wiatru,
-- guzik WIATR: WŁ./WYŁ. u góry mapy,
-- kolor strzałek zgodny z informacją o wietrze/pogodzie,
-- 3 samoloty Fw 200 Condor,
-- automatyczny ogień przeciwlotniczy do samolotów w zasięgu,
-- zasięg AA ustawiony na 3810 m dla 40 mm Bofors jako praktyczny zasięg.
+Zmiany:
+- przewidywany tor kończy się strzałką i etykietą czasu,
+- przełączany przyciskiem INFO opis punktu celowania: czas dolotu pocisku i odległość od celu,
+- sonar reaguje tylko na cele podwodne,
+- dodane podwodne cele testowe,
+- po zniszczeniu frachtowca zostaje ikona wraku,
+- trafienie wymaga dużo dokładniejszego celowania,
+- kilwater jest jednokolorowy, półprzezroczysty i narasta/zanika wraz z prędkością okrętu.
