@@ -286,8 +286,13 @@
       const aim = getAimPoint(), start = getGunMuzzle(), flightTime = ballisticFlightTime(guns.range);
       shells.push({ startX:start.x, startY:start.y, endX:aim.x, endY:aim.y, x:start.x, y:start.y, z:0, t:0, flightTime });
       muzzleFlashes.push({ x:start.x, y:start.y, angle:guns.bearing, t:0 });
-      guns.reload = guns.reloadTime; lastMessage = `Ogień. Czas lotu: ${flightTime.toFixed(1)} s.`;
-      ensureAudio(); tone(72,0.17,"sawtooth",0.18,48); noise(0.22,0.08,160);
+      guns.reload = guns.reloadTime;
+      lastMessage = `Ogień. Czas lotu: ${flightTime.toFixed(1)} s.`;
+      ensureAudio();
+      // Mocniejszy, bardziej słyszalny huk: niski trzask + krótki szum wybuchu.
+      tone(58, 0.22, "sawtooth", 0.32, 34);
+      setTimeout(() => tone(92, 0.11, "square", 0.18, 52), 25);
+      noise(0.34, 0.20, 240);
     }
 
     function drawOcean() {
@@ -314,13 +319,29 @@
     }
     function drawWaves() {
       const w = game.width, h = game.height;
-      ctx.save(); ctx.strokeStyle = `rgba(205,220,205,${0.035 + weather.wave*0.032})`; ctx.lineWidth=1;
-      const waveStep = 46, worldPhase = camera.x*.00045 + camera.y*.00025, timePhase = weather.t*weather.windSpeed*.22, amp = 1.4 + weather.wave*1.7, windShift = (weather.t*weather.windSpeed*5)%waveStep;
-      for (let y=-waveStep; y<h+waveStep; y+=waveStep) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(205,220,205,${0.025 + weather.wave * 0.025})`;
+      ctx.lineWidth = 1;
+
+      // Fale są zakotwiczone w świecie, nie płyną po ekranie.
+      // Dzięki temu ruch okrętu jest czytelny względem powierzchni morza.
+      const waveSpacingM = 720;
+      const waveLengthM = 520;
+      const ampPx = 1.8 + weather.wave * 1.4;
+      const startY = Math.floor(camera.y / waveSpacingM) * waveSpacingM;
+      const endY = camera.y + h * METERS_PER_PIXEL + waveSpacingM;
+      const startX = Math.floor(camera.x / waveLengthM) * waveLengthM;
+      const endX = camera.x + w * METERS_PER_PIXEL + waveLengthM;
+
+      for (let wy = startY; wy <= endY; wy += waveSpacingM) {
         ctx.beginPath();
-        for (let x=-28; x<w+32; x+=16) {
-          const yy = y + windShift + Math.sin(x*.015+worldPhase+timePhase)*amp + Math.sin(x*.037-timePhase*.6)*.7;
-          if (x===-28) ctx.moveTo(x,yy); else ctx.lineTo(x,yy);
+        let first = true;
+        for (let wx = startX; wx <= endX; wx += 110) {
+          const sx = (wx - camera.x) / METERS_PER_PIXEL;
+          const sy = (wy - camera.y) / METERS_PER_PIXEL;
+          const yy = sy + Math.sin(wx / waveLengthM * Math.PI * 2 + wy * 0.0007) * ampPx;
+          if (first) { ctx.moveTo(sx, yy); first = false; }
+          else ctx.lineTo(sx, yy);
         }
         ctx.stroke();
       }
@@ -328,9 +349,22 @@
     }
     function drawRain() {
       if (weather.rain <= 0) return;
-      const w=game.width, h=game.height; ctx.save(); ctx.strokeStyle = `rgba(210,225,220,${0.10+weather.rain*.16})`; ctx.lineWidth=1;
-      const slantX = Math.cos(weather.windDir)*18, slantY = Math.sin(weather.windDir)*18+12;
-      for (const r of rainDrops) { const x=((r.x*w + weather.t*weather.windSpeed*25*r.s)%(w+80))-40, y=((r.y*h + weather.t*230*r.s)%(h+80))-40; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+slantX*r.s, y+slantY*r.s); ctx.stroke(); }
+      const w = game.width, h = game.height;
+      ctx.save();
+      // Deszcz jest subtelny, żeby nie niszczył percepcji ruchu.
+      ctx.strokeStyle = `rgba(210,225,220,${0.035 + weather.rain * 0.055})`;
+      ctx.lineWidth = 1;
+      const slantX = Math.cos(weather.windDir) * 10;
+      const slantY = Math.sin(weather.windDir) * 10 + 7;
+      for (let i = 0; i < rainDrops.length; i += 2) {
+        const r = rainDrops[i];
+        const x = ((r.x * w + weather.t * weather.windSpeed * 12 * r.s) % (w + 80)) - 40;
+        const y = ((r.y * h + weather.t * 145 * r.s) % (h + 80)) - 40;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + slantX * r.s, y + slantY * r.s);
+        ctx.stroke();
+      }
       ctx.restore();
     }
     function drawRangeCircles() {
@@ -344,8 +378,43 @@
       ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(length,0); ctx.stroke(); ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(length,0); ctx.lineTo(length-10,-5); ctx.lineTo(length-10,5); ctx.closePath(); ctx.fill();
       ctx.rotate(-angle); ctx.font="14px system-ui"; ctx.fillText(label, Math.cos(angle)*(length+8), Math.sin(angle)*(length+8)); ctx.restore();
     }
+    function drawCourseDeviationArc() {
+      if (ship.orderedCourse === null && Math.abs(ship.rudder) < 1) return;
+      const s = worldToScreen(ship);
+      const base = ship.heading;
+      const targetAngle = ship.orderedCourse !== null
+        ? degToRad(ship.orderedCourse)
+        : ship.heading + (ship.rudder / ship.maxRudder) * 0.72;
+      let diff = angleDiffRad(targetAngle, base);
+      if (Math.abs(diff) < 0.02) return;
+      const radius = 72;
+      const start = base;
+      const end = base + diff;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.strokeStyle = "rgba(225,235,225,.88)";
+      ctx.fillStyle = "rgba(225,235,225,.92)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, start, end, diff < 0);
+      ctx.stroke();
+      const arrowA = end;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(arrowA) * radius, Math.sin(arrowA) * radius);
+      ctx.lineTo(Math.cos(arrowA - Math.sign(diff) * 0.15) * (radius - 10), Math.sin(arrowA - Math.sign(diff) * 0.15) * (radius - 10));
+      ctx.lineTo(Math.cos(arrowA + Math.sign(diff) * 0.15) * (radius - 10), Math.sin(arrowA + Math.sign(diff) * 0.15) * (radius - 10));
+      ctx.closePath();
+      ctx.fill();
+      ctx.font = "14px system-ui";
+      const deg = Math.abs(diff * 180 / Math.PI).toFixed(0);
+      const mid = base + diff / 2;
+      ctx.fillText(`${deg}°`, Math.cos(mid) * (radius + 16), Math.sin(mid) * (radius + 16));
+      ctx.restore();
+    }
+
     function drawTacticalOverlays() {
       drawRangeCircles();
+      drawCourseDeviationArc();
       if (Math.abs(ship.rudder)>1 && ship.speed>1) drawArrowWorld(ship, ship.heading+(ship.rudder/ship.maxRudder)*(ship.speed/18.5)*.42, 1050, "przewidywany", "rgba(225,235,225,.75)", true);
       if (ship.orderedCourse !== null) drawArrowWorld(ship, degToRad(ship.orderedCourse), 1300, `kurs ${String(Math.round(ship.orderedCourse)).padStart(3,"0")}`, "rgba(225,235,225,.75)", true);
       drawArrowWorld(ship, ship.heading, 900, "kurs", "rgba(225,235,225,.85)");
@@ -358,11 +427,82 @@
       ctx.save(); ctx.translate(p.x,p.y); ctx.fillStyle="#aeb8aa"; ctx.strokeStyle="#0b100d"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.ellipse(0,0,9,5,0,0,Math.PI*2); ctx.fill(); ctx.stroke(); ctx.fillStyle="#d9e3d3"; ctx.font="14px system-ui"; ctx.fillText(`${Math.round(dist(ship,target))} m`,14,-8); ctx.restore();
     }
     function drawDestroyer(context,x,y,heading,scale=1,wakeOn=true) {
-      context.save(); context.translate(x,y); context.rotate(heading); context.scale(scale,scale); context.lineWidth=1.4/scale; context.strokeStyle="#0b100d"; context.fillStyle="#8d978b";
-      context.beginPath(); context.moveTo(32,0); context.lineTo(20,-5.5); context.lineTo(-27,-6.5); context.lineTo(-36,-3); context.lineTo(-40,0); context.lineTo(-36,3); context.lineTo(-27,6.5); context.lineTo(20,5.5); context.closePath(); context.fill(); context.stroke();
-      context.fillStyle="#c1c8bd"; context.fillRect(-6,-4,14,8); context.fillStyle="#6f7a70"; context.fillRect(-21,-3,9,6);
-      drawTurret(context,22,0,guns.bearing-heading,scale); drawTurret(context,10,0,guns.bearing-heading,scale); drawTurret(context,-28,0,guns.bearing-heading,scale);
-      if (wakeOn) { context.strokeStyle="rgba(220,230,215,.35)"; context.lineWidth=1/scale; context.beginPath(); context.moveTo(-39,-2); context.lineTo(-75,-10); context.moveTo(-39,2); context.lineTo(-75,10); context.stroke(); }
+      context.save();
+      context.translate(x,y);
+      context.rotate(heading);
+      context.scale(scale,scale);
+      context.lineWidth = 1.25 / scale;
+      context.strokeStyle = "#0b100d";
+
+      // Uproszczona, ale bardziej fletcherowa sylwetka:
+      // długi, wąski kadłub, ostro zakończony dziób, rufa pawężowa,
+      // dwie wieże dziobowe, trzy rufowe, nadbudówka i kominy.
+      context.fillStyle = "#858f84";
+      context.beginPath();
+      context.moveTo(54, 0);       // ostry dziób
+      context.lineTo(39, -7);
+      context.lineTo(-43, -8.5);
+      context.lineTo(-55, -5.5);
+      context.lineTo(-61, -2.8);
+      context.lineTo(-63, 0);      // rufa
+      context.lineTo(-61, 2.8);
+      context.lineTo(-55, 5.5);
+      context.lineTo(-43, 8.5);
+      context.lineTo(39, 7);
+      context.closePath();
+      context.fill();
+      context.stroke();
+
+      // Pokład.
+      context.fillStyle = "#aab3a7";
+      context.fillRect(-38, -4.8, 74, 9.6);
+
+      // Nadbudówki.
+      context.fillStyle = "#c0c7bd";
+      context.fillRect(9, -6.5, 18, 13);
+      context.fillStyle = "#a3ada1";
+      context.fillRect(-13, -5.5, 17, 11);
+      context.fillStyle = "#747f76";
+      context.fillRect(-27, -4.5, 9, 9);
+      context.fillRect(-36, -4.2, 7, 8.4);
+
+      // Maszt i mostek.
+      context.strokeStyle = "#d9e3d3";
+      context.lineWidth = 1 / scale;
+      context.beginPath();
+      context.moveTo(18, 0);
+      context.lineTo(18, -21);
+      context.moveTo(18, -12);
+      context.lineTo(8, -18);
+      context.moveTo(18, -12);
+      context.lineTo(28, -18);
+      context.stroke();
+
+      // Pięć stanowisk artylerii 5 cali: 2 dziobowe, 3 rufowe.
+      drawTurret(context, 43, 0, guns.bearing-heading, scale);
+      drawTurret(context, 29, 0, guns.bearing-heading, scale);
+      drawTurret(context, -19, 0, guns.bearing-heading, scale);
+      drawTurret(context, -38, 0, guns.bearing-heading, scale);
+      drawTurret(context, -52, 0, guns.bearing-heading, scale);
+
+      // Wyrzutnie torped / wyposażenie śródokręcia.
+      context.strokeStyle = "#202820";
+      context.lineWidth = 1.1 / scale;
+      for (let i = -2; i <= 2; i++) {
+        context.beginPath();
+        context.moveTo(-4, i * 2.2);
+        context.lineTo(6, i * 2.2);
+        context.stroke();
+      }
+
+      if (wakeOn) {
+        context.strokeStyle = "rgba(220,230,215,.35)";
+        context.lineWidth = 1 / scale;
+        context.beginPath();
+        context.moveTo(-62,-3); context.lineTo(-96,-12);
+        context.moveTo(-62,3); context.lineTo(-96,12);
+        context.stroke();
+      }
       context.restore();
     }
     function drawTurret(context,x,y,angle,scale) { context.save(); context.translate(x,y); context.rotate(angle); context.fillStyle="#d7ddd1"; context.strokeStyle="#0b100d"; context.lineWidth=1/scale; context.beginPath(); context.arc(0,0,3.2,0,Math.PI*2); context.fill(); context.stroke(); context.beginPath(); context.moveTo(0,0); context.lineTo(11,0); context.stroke(); context.restore(); }
