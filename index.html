@@ -14,9 +14,10 @@
       --line: #39463b;
       --text: #d9e3d3;
       --muted: #95a18f;
-      --green: #6fe25d;
-      --blue: #4ab6ff;
-      --yellow: #d9aa2a;
+      --sonar: #6fe25d;
+      --radar: #4ab6ff;
+      --guns: #d9aa2a;
+      --danger: #d77752;
     }
 
     body {
@@ -27,7 +28,7 @@
       height: 100vh;
       overflow: hidden;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) clamp(190px, 21vw, 255px);
+      grid-template-columns: minmax(0, 1fr) clamp(185px, 20vw, 245px);
       grid-template-rows: minmax(0, 1fr) auto;
       gap: 5px;
       padding: 5px;
@@ -55,7 +56,7 @@
       min-height: 0;
       display: grid;
       grid-template-rows: 1fr 1fr 1fr auto auto;
-      gap: 6px;
+      gap: 5px;
     }
 
     .panel {
@@ -63,21 +64,22 @@
       background: linear-gradient(180deg, #121812, #070b08);
       border: 1px solid var(--line);
       border-radius: 9px;
-      padding: 7px;
+      padding: 6px;
       overflow: hidden;
     }
 
     .panelTitle {
       font-family: "Courier New", Courier, monospace;
-      font-size: 13px;
+      font-size: 12px;
       color: var(--text);
       margin-bottom: 4px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 4px;
     }
 
-    .statusOn { color: var(--green); }
+    .statusOn { color: var(--sonar); }
     .statusOff { color: #6d756b; }
 
     .scopeCanvas, #shipView {
@@ -92,23 +94,23 @@
     .miniControls {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      gap: 6px;
-      min-height: 72px;
+      gap: 5px;
+      min-height: 70px;
     }
 
     .controlCard {
       background: var(--panel2);
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 7px;
+      padding: 6px 4px;
       font-family: "Courier New", Courier, monospace;
-      font-size: 12px;
+      font-size: 11px;
       text-align: center;
     }
 
     .bigVal {
-      color: var(--green);
-      font-size: 17px;
+      color: var(--sonar);
+      font-size: 15px;
       margin-top: 4px;
     }
 
@@ -116,10 +118,10 @@
       background: #151d16;
       border: 1px solid var(--line);
       border-radius: 5px;
-      color: var(--green);
+      color: var(--sonar);
       font-family: "Courier New", Courier, monospace;
-      font-size: 11px;
-      padding: 2px 6px;
+      font-size: 10px;
+      padding: 2px 5px;
       cursor: pointer;
     }
 
@@ -132,8 +134,9 @@
       border-radius: 8px;
       padding: 7px;
       font-family: "Courier New", Courier, monospace;
-      font-size: 12px;
+      font-size: 11px;
       color: var(--muted);
+      line-height: 1.2;
     }
 
     #console {
@@ -148,19 +151,22 @@
       font-family: "Courier New", Courier, monospace;
       white-space: pre-wrap;
       line-height: 1.2;
-      font-size: clamp(11px, 1.1vw, 13px);
+      font-size: clamp(10px, 1.05vw, 13px);
       color: var(--text);
     }
 
     @media (max-width: 900px) {
       body {
         grid-template-columns: 1fr;
-        grid-template-rows: 58vh 1fr auto;
+        grid-template-rows: 58vh auto auto;
         overflow: auto;
         height: auto;
         min-height: 100vh;
       }
-      aside { grid-template-columns: 1fr 1fr; grid-template-rows: 170px 170px auto; }
+      aside {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 170px 170px auto;
+      }
       #console { grid-column: 1; }
       .miniControls, .weaponControls { grid-column: span 2; }
     }
@@ -171,7 +177,11 @@
 
   <aside>
     <section class="panel">
-      <div class="panelTitle"><span>SONAR</span><button id="sonarButton" class="tinyButton">WŁĄCZ</button><span id="sonarStatus" class="statusOff">WYŁ.</span></div>
+      <div class="panelTitle">
+        <span>SONAR</span>
+        <button id="sonarButton" class="tinyButton">WŁĄCZ</button>
+        <span id="sonarStatus" class="statusOff">WYŁ.</span>
+      </div>
       <canvas id="sonar" class="scopeCanvas"></canvas>
     </section>
 
@@ -218,9 +228,12 @@
     const keysPressed = new Set();
     const keysHandled = new Set();
 
-    const WORLD_W = 22000;
-    const WORLD_H = 22000;
+    const WORLD_W = 24000;
+    const WORLD_H = 24000;
     let METERS_PER_PIXEL = 42;
+    let zoom = 1;
+    const MIN_ZOOM = 0.55;
+    const MAX_ZOOM = 3.2;
 
     const speedOrders = [
       { name: "STOP", value: 0 },
@@ -260,8 +273,8 @@
 
     const weather = {
       t: 0,
-      rain: 0.65,
-      wave: 0.72,
+      rain: 0.68,
+      wave: 0.76,
       windDir: degToRad(305),
       windSpeed: 14.5
     };
@@ -276,7 +289,11 @@
     const shells = [];
     const splashes = [];
     const muzzleFlashes = [];
-    const rainDrops = Array.from({ length: 360 }, () => ({ x: Math.random(), y: Math.random(), s: 0.55 + Math.random() * 1.1 }));
+    const rainDrops = Array.from({ length: 420 }, () => ({
+      x: Math.random(),
+      y: Math.random(),
+      s: 0.55 + Math.random() * 1.25
+    }));
 
     function resizeCanvas(canvas) {
       const rect = canvas.getBoundingClientRect();
@@ -287,16 +304,25 @@
         canvas.width = w;
         canvas.height = h;
       }
-      return dpr;
     }
 
     function resizeAll() {
-      resizeCanvas(game); resizeCanvas(sonarCanvas); resizeCanvas(radarCanvas); resizeCanvas(shipView);
+      resizeCanvas(game);
+      resizeCanvas(sonarCanvas);
+      resizeCanvas(radarCanvas);
+      resizeCanvas(shipView);
     }
+
     window.addEventListener("resize", resizeAll);
     resizeAll();
-
     sonarButton.addEventListener("click", () => toggleSonar());
+
+    game.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      // Płynny zoom kółkiem myszy. Zoom zmienia skalę mapy, ale okręt zostaje w centrum kamery.
+      const factor = Math.exp(-event.deltaY * 0.0012);
+      zoom = clamp(zoom * factor, MIN_ZOOM, MAX_ZOOM);
+    }, { passive: false });
 
     window.addEventListener("keydown", (event) => {
       const key = event.key.toLowerCase();
@@ -309,9 +335,15 @@
         if (Number.isFinite(course)) {
           ship.orderedCourse = ((course % 360) + 360) % 360;
           ship.autopilot = true;
-          lastMessage = `Rozkaz zmiany kursu na ${ship.orderedCourse.toString().padStart(3, "0")}°.`;
+          lastMessage = `Rozkaz zmiany kursu na ${String(ship.orderedCourse).padStart(3, "0")}°.`;
         }
         courseInput = "";
+      }
+
+      if (event.key === "Escape") {
+        courseInput = "";
+        ship.autopilot = false;
+        ship.orderedCourse = null;
       }
     });
 
@@ -338,28 +370,27 @@
     function angleToPoint(a, b) { return Math.atan2(b.y - a.y, b.x - a.x); }
 
     function randomTarget() {
-      const d = 3100 + Math.random() * 3200;
+      const d = 3100 + Math.random() * 3300;
       const a = Math.random() * Math.PI * 2;
       return {
-        x: ship.x + Math.cos(a) * d,
-        y: ship.y + Math.sin(a) * d,
+        x: (ship.x + Math.cos(a) * d + WORLD_W) % WORLD_W,
+        y: (ship.y + Math.sin(a) * d + WORLD_H) % WORLD_H,
         radius: 95,
         alive: true
       };
     }
 
     function updateMapScale() {
-      const minVisibleRadiusPx = Math.min(
-        game.width * camera.anchorX,
-        game.width * (1 - camera.anchorX),
-        game.height * camera.anchorY,
-        game.height * (1 - camera.anchorY)
-      ) * 0.90;
-      METERS_PER_PIXEL = radar.range / Math.max(120, minVisibleRadiusPx);
+      // Skala dobierana tak, aby pełny okrąg radaru mieścił się na głównym ekranie.
+      const minVisibleRadiusPx = Math.min(game.width, game.height) * 0.43;
+      METERS_PER_PIXEL = radar.range / Math.max(120, minVisibleRadiusPx) / zoom;
     }
 
     function worldToScreen(p) {
-      return { x: (p.x - camera.x) / METERS_PER_PIXEL, y: (p.y - camera.y) / METERS_PER_PIXEL };
+      return {
+        x: (p.x - camera.x) / METERS_PER_PIXEL,
+        y: (p.y - camera.y) / METERS_PER_PIXEL
+      };
     }
 
     function updateCamera() {
@@ -383,7 +414,7 @@
       if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, audioCtx.currentTime + duration * 0.85);
       filter.type = "bandpass";
       filter.frequency.value = 1200;
-      filter.Q.value = 7;
+      filter.Q.value = 8;
       gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(volume, audioCtx.currentTime + 0.012);
       gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
@@ -393,11 +424,12 @@
     }
 
     function sonarPing(contact) {
-      tone(1550, 0.22, "sine", 0.13, 920);
-      setTimeout(() => tone(920, 0.12, "sine", 0.045, 760), 230);
+      // Głośniejszy ping z opadającą częstotliwością i osobnym echem kontaktu.
+      tone(1700, 0.24, "sine", 0.16, 850);
+      setTimeout(() => tone(980, 0.10, "sine", 0.06, 720), 250);
       if (contact) {
-        setTimeout(() => tone(620, 0.18, "triangle", 0.12, 520), 430);
-        setTimeout(() => tone(700, 0.12, "triangle", 0.07, 570), 660);
+        setTimeout(() => tone(620, 0.18, "triangle", 0.14, 520), 430);
+        setTimeout(() => tone(740, 0.13, "triangle", 0.09, 560), 660);
       }
     }
 
@@ -412,17 +444,35 @@
       if (wasPressedOnce("arrowup") || wasPressedOnce("w")) ship.targetSpeedIndex = clamp(ship.targetSpeedIndex + 1, 0, speedOrders.length - 1);
       if (wasPressedOnce("arrowdown") || wasPressedOnce("s")) ship.targetSpeedIndex = clamp(ship.targetSpeedIndex - 1, 0, speedOrders.length - 1);
 
-      if (wasPressedOnce("arrowleft") || wasPressedOnce("a")) { ship.rudder = clamp(ship.rudder - 5, -ship.maxRudder, ship.maxRudder); ship.autopilot = false; ship.orderedCourse = null; }
-      if (wasPressedOnce("arrowright") || wasPressedOnce("d")) { ship.rudder = clamp(ship.rudder + 5, -ship.maxRudder, ship.maxRudder); ship.autopilot = false; ship.orderedCourse = null; }
+      if (wasPressedOnce("arrowleft") || wasPressedOnce("a")) {
+        ship.rudder = clamp(ship.rudder - 5, -ship.maxRudder, ship.maxRudder);
+        ship.autopilot = false;
+        ship.orderedCourse = null;
+      }
+
+      if (wasPressedOnce("arrowright") || wasPressedOnce("d")) {
+        ship.rudder = clamp(ship.rudder + 5, -ship.maxRudder, ship.maxRudder);
+        ship.autopilot = false;
+        ship.orderedCourse = null;
+      }
+
       if (wasPressedOnce("x")) ship.targetSpeedIndex = 0;
       if (wasPressedOnce("z")) ship.rudder = 0;
-
       if (wasPressedOnce("p")) toggleSonar();
 
-      if (wasPressedOnce("f")) { guns.mode = "AUTO"; lastMessage = "Tryb automatyczny artylerii: tylko kierunek, bez automatycznej nastawy zasięgu."; }
-      if (wasPressedOnce("g")) { guns.mode = "MANUAL"; lastMessage = "Tryb manualny artylerii."; }
-      if (wasPressedOnce(",") || wasPressedOnce("<")) guns.bearing -= degToRad(5) - degToRad(0);
-      if (wasPressedOnce(".") || wasPressedOnce(">")) guns.bearing += degToRad(5) - degToRad(0);
+      if (wasPressedOnce("f")) {
+        guns.mode = "AUTO";
+        lastMessage = "Tryb automatyczny artylerii: obraca działa na kierunek celu, bez automatycznej nastawy zasięgu.";
+      }
+      if (wasPressedOnce("g")) {
+        guns.mode = "MANUAL";
+        lastMessage = "Tryb manualny artylerii.";
+      }
+
+      // Płynne obracanie dział podczas trzymania klawiszy.
+      const gunTurnRate = 10 * Math.PI / 180;
+      if (keysPressed.has(",") || keysPressed.has("<")) guns.bearing -= gunTurnRate * dt;
+      if (keysPressed.has(".") || keysPressed.has(">")) guns.bearing += gunTurnRate * dt;
       if (wasPressedOnce("o")) guns.range = clamp(guns.range + 250, guns.minRange, guns.maxRange);
       if (wasPressedOnce("l")) guns.range = clamp(guns.range - 250, guns.minRange, guns.maxRange);
       if (wasPressedOnce(" ")) fireGun();
@@ -447,6 +497,7 @@
     }
 
     function updatePhysics(dt) {
+      const previousHeading = ship.heading;
       const targetSpeed = speedOrders[ship.targetSpeedIndex].value;
       const accel = targetSpeed > ship.speed ? 0.55 : 0.82;
       ship.speed += clamp(targetSpeed - ship.speed, -accel * dt, accel * dt);
@@ -458,16 +509,27 @@
       const turnRate = rudderFactor * speedFactor * 0.105;
       ship.heading += turnRate * dt;
 
-      // Wiatr: boczny znosi kurs i lekko wpływa na prędkość. Efekt jest mały, bo niszczyciel ma dużą bezwładność.
+      // Wiatr i fala: mały, ale stały wpływ na prędkość, dryf i kurs.
       const windAngleToShip = angleDiffRad(weather.windDir, ship.heading);
       const headWind = Math.cos(windAngleToShip) * weather.windSpeed;
       const crossWind = Math.sin(windAngleToShip) * weather.windSpeed;
-      const windSpeedEffect = -headWind * 0.018;
-      const leeway = crossWind * 0.016;
-      const yawDrift = crossWind * 0.00018;
+      const seaState = weather.wave;
 
-      ship.heading += yawDrift * dt;
+      const windSpeedEffect = -headWind * 0.010 - seaState * 0.10;
+      const leeway = crossWind * (0.010 + seaState * 0.004);
+      const yawDrift = crossWind * (0.000055 + seaState * 0.000025);
+      const waveYaw = Math.sin(weather.t * 0.9 + ship.x * 0.00018) * seaState * 0.00045;
+
+      ship.heading += (yawDrift + waveYaw) * dt;
+
+      // W trybie manualnym celownik dział jest związany z okrętem:
+      // gdy okręt skręca, punkt celowania obraca się razem z nim.
+      if (guns.mode === "MANUAL") {
+        guns.bearing += ship.heading - previousHeading;
+      }
+
       const actualSpeed = Math.max(0, ship.speed + windSpeedEffect);
+
       ship.x += Math.cos(ship.heading) * actualSpeed * dt;
       ship.y += Math.sin(ship.heading) * actualSpeed * dt;
       ship.x += Math.cos(weather.windDir) * leeway * dt;
@@ -487,13 +549,12 @@
         sonar.pingCooldown = 2.4;
       }
       if (contact && sonar.contactToneCooldown <= 0) {
-        tone(520, 0.05, "square", 0.018);
+        tone(520, 0.07, "square", 0.04, 480);
         sonar.contactToneCooldown = 0.55;
       }
     }
 
     function ballisticFlightTime(rangeM) {
-      // Uproszczenie: pocisk 5-calowy, v0 ok. 792 m/s; niska elewacja dla gry.
       const v = guns.muzzleVelocity;
       const g = 9.81;
       const safeRange = clamp(rangeM, 100, 11000);
@@ -504,6 +565,7 @@
 
     function updateProjectiles(dt) {
       guns.reload = Math.max(0, guns.reload - dt);
+
       for (let i = shells.length - 1; i >= 0; i--) {
         const s = shells[i];
         s.t += dt;
@@ -517,13 +579,23 @@
             target.alive = false;
             targetRespawnTimer = 10;
             lastMessage = "Trafienie! Nowy cel za 10 sekund.";
-          } else lastMessage = "Upadek pocisku w wodę.";
+          } else {
+            lastMessage = "Upadek pocisku w wodę.";
+          }
           splashes.push({ x: s.endX, y: s.endY, t: 0, maxT: hit ? 1.4 : 1.0, hit });
           shells.splice(i, 1);
         }
       }
-      for (let i = splashes.length - 1; i >= 0; i--) { splashes[i].t += dt; if (splashes[i].t > splashes[i].maxT) splashes.splice(i, 1); }
-      for (let i = muzzleFlashes.length - 1; i >= 0; i--) { muzzleFlashes[i].t += dt; if (muzzleFlashes[i].t > 0.18) muzzleFlashes.splice(i, 1); }
+
+      for (let i = splashes.length - 1; i >= 0; i--) {
+        splashes[i].t += dt;
+        if (splashes[i].t > splashes[i].maxT) splashes.splice(i, 1);
+      }
+
+      for (let i = muzzleFlashes.length - 1; i >= 0; i--) {
+        muzzleFlashes[i].t += dt;
+        if (muzzleFlashes[i].t > 0.18) muzzleFlashes.splice(i, 1);
+      }
     }
 
     function respawnTarget(dt) {
@@ -536,11 +608,25 @@
       }
     }
 
-    function getAimPoint() { return { x: ship.x + Math.cos(guns.bearing) * guns.range, y: ship.y + Math.sin(guns.bearing) * guns.range }; }
-    function getGunMuzzle() { return { x: ship.x + Math.cos(ship.heading) * 24, y: ship.y + Math.sin(ship.heading) * 24 }; }
+    function getAimPoint() {
+      return {
+        x: ship.x + Math.cos(guns.bearing) * guns.range,
+        y: ship.y + Math.sin(guns.bearing) * guns.range
+      };
+    }
+
+    function getGunMuzzle() {
+      return {
+        x: ship.x + Math.cos(ship.heading) * 24,
+        y: ship.y + Math.sin(ship.heading) * 24
+      };
+    }
 
     function fireGun() {
-      if (guns.reload > 0) { lastMessage = "Działa przeładowują."; return; }
+      if (guns.reload > 0) {
+        lastMessage = "Działa przeładowują.";
+        return;
+      }
       const aim = getAimPoint();
       const start = getGunMuzzle();
       const flightTime = ballisticFlightTime(guns.range);
@@ -548,11 +634,13 @@
       muzzleFlashes.push({ x: start.x, y: start.y, angle: guns.bearing, t: 0 });
       guns.reload = guns.reloadTime;
       lastMessage = `Ogień. Czas lotu: ${flightTime.toFixed(1)} s.`;
-      ensureAudio(); tone(110, 0.16, "sawtooth", 0.045);
+      ensureAudio();
+      tone(110, 0.16, "sawtooth", 0.055, 70);
     }
 
     function drawOcean() {
-      const w = game.width, h = game.height;
+      const w = game.width;
+      const h = game.height;
       const grd = ctx.createRadialGradient(w * 0.52, h * 0.44, 40, w * 0.52, h * 0.44, Math.max(w, h));
       grd.addColorStop(0, "#263b36");
       grd.addColorStop(0.55, "#1b2c28");
@@ -571,7 +659,6 @@
       for (let wx = startX; wx <= endX; wx += gridStepM) {
         const sx = (wx - camera.x) / METERS_PER_PIXEL;
         ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, h); ctx.stroke();
-        ctx.fillStyle = "rgba(220,230,215,.65)"; ctx.font = "12px Courier New"; ctx.fillText(`${Math.round((wx - ship.x)/1000)}`, sx + 4, 16);
       }
       for (let wy = startY; wy <= endY; wy += gridStepM) {
         const sy = (wy - camera.y) / METERS_PER_PIXEL;
@@ -584,18 +671,28 @@
     }
 
     function drawWaves() {
-      const w = game.width, h = game.height;
+      const w = game.width;
+      const h = game.height;
       ctx.save();
-      ctx.strokeStyle = `rgba(205,220,205,${0.07 + weather.wave * 0.06})`;
+      ctx.strokeStyle = `rgba(205,220,205,${0.035 + weather.wave * 0.032})`;
       ctx.lineWidth = 1;
-      const waveStep = 80;
-      const drift = weather.t * weather.windSpeed * 2;
-      for (let y = -40; y < h + 40; y += waveStep) {
+
+      // Subtelne fale przywiązane do świata, nie do ekranu.
+      // Dzięki modulo nie „odpływają” poza ekran podczas skrętu okrętu.
+      const waveStep = 46;
+      const worldPhase = (camera.x * 0.00045 + camera.y * 0.00025);
+      const timePhase = weather.t * weather.windSpeed * 0.22;
+      const amp = 1.4 + weather.wave * 1.7;
+      const windShift = (weather.t * weather.windSpeed * 5) % waveStep;
+
+      for (let y = -waveStep; y < h + waveStep; y += waveStep) {
         ctx.beginPath();
-        for (let x = -40; x < w + 40; x += 16) {
-          const wx = x + Math.cos(weather.windDir) * drift;
-          const yy = y + Math.sin((x + drift) * 0.018) * 7 + Math.sin((x + weather.t * 30) * 0.041) * 2;
-          if (x === -40) ctx.moveTo(wx, yy); else ctx.lineTo(wx, yy);
+        for (let x = -28; x < w + 32; x += 16) {
+          const localY = y + windShift;
+          const yy = localY
+            + Math.sin(x * 0.015 + worldPhase + timePhase) * amp
+            + Math.sin(x * 0.037 - timePhase * 0.6) * 0.7;
+          if (x === -28) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
         }
         ctx.stroke();
       }
@@ -604,7 +701,8 @@
 
     function drawRain() {
       if (weather.rain <= 0) return;
-      const w = game.width, h = game.height;
+      const w = game.width;
+      const h = game.height;
       ctx.save();
       ctx.strokeStyle = `rgba(210,225,220,${0.10 + weather.rain * 0.16})`;
       ctx.lineWidth = 1;
@@ -628,23 +726,29 @@
         ctx.beginPath(); ctx.arc(s.x, s.y, range / METERS_PER_PIXEL, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
       }
-      circle(sonar.minRange, "rgba(111,226,93,.65)", [6, 4]);
-      circle(sonar.range, "rgba(111,226,93,.75)", [9, 5]);
-      circle(radar.range, "rgba(74,182,255,.72)", [9, 5]);
-      circle(guns.minRange, "rgba(217,170,42,.75)", [8, 5]);
-      circle(guns.maxRange, "rgba(217,170,42,.90)", [10, 5]);
+      circle(sonar.minRange, "rgba(111,226,93,.55)", [6, 4]);
+      circle(sonar.range, "rgba(111,226,93,.82)", [9, 5]);
+      circle(radar.range, "rgba(74,182,255,.82)", [9, 5]);
+      circle(guns.minRange, "rgba(217,170,42,.72)", [8, 5]);
+      circle(guns.maxRange, "rgba(217,170,42,.92)", [10, 5]);
     }
 
     function drawArrowWorld(origin, angle, lengthM, label, color, dashed=false) {
       const s = worldToScreen(origin);
       const length = lengthM / METERS_PER_PIXEL;
-      ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(angle);
-      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.6;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(angle);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 1.6;
       if (dashed) ctx.setLineDash([7, 6]);
       ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(length, 0); ctx.stroke();
       ctx.setLineDash([]);
       ctx.beginPath(); ctx.moveTo(length, 0); ctx.lineTo(length-10, -5); ctx.lineTo(length-10, 5); ctx.closePath(); ctx.fill();
-      ctx.rotate(-angle); ctx.font = "12px system-ui"; ctx.fillText(label, Math.cos(angle)*(length+8), Math.sin(angle)*(length+8));
+      ctx.rotate(-angle);
+      ctx.font = "12px system-ui";
+      ctx.fillText(label, Math.cos(angle)*(length+8), Math.sin(angle)*(length+8));
       ctx.restore();
     }
 
@@ -654,97 +758,201 @@
         const predicted = ship.heading + (ship.rudder / ship.maxRudder) * (ship.speed / 18.5) * 0.42;
         drawArrowWorld(ship, predicted, 1050, "przewidywany", "rgba(225,235,225,.75)", true);
       }
-      if (ship.orderedCourse !== null) drawArrowWorld(ship, degToRad(ship.orderedCourse), 1300, `kurs ${String(Math.round(ship.orderedCourse)).padStart(3,"0")}`, "rgba(225,235,225,.75)", true);
+      if (ship.orderedCourse !== null) {
+        drawArrowWorld(ship, degToRad(ship.orderedCourse), 1300, `kurs ${String(Math.round(ship.orderedCourse)).padStart(3,"0")}`, "rgba(225,235,225,.75)", true);
+      }
       drawArrowWorld(ship, ship.heading, 900, "kurs", "rgba(225,235,225,.85)");
 
       const aim = getAimPoint();
-      const ss = worldToScreen(ship), aa = worldToScreen(aim);
+      const ss = worldToScreen(ship);
+      const aa = worldToScreen(aim);
       ctx.save();
-      ctx.strokeStyle = "rgba(217,170,42,.85)"; ctx.lineWidth = 1.8; ctx.setLineDash([7, 7]);
-      ctx.beginPath(); ctx.moveTo(ss.x, ss.y); ctx.lineTo(aa.x, aa.y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = "rgba(217,170,42,.85)";
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash([7, 7]);
+      ctx.beginPath(); ctx.moveTo(ss.x, ss.y); ctx.lineTo(aa.x, aa.y); ctx.stroke();
+      ctx.setLineDash([]);
       ctx.beginPath(); ctx.arc(aa.x, aa.y, 13, 0, Math.PI*2); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(aa.x-20, aa.y); ctx.lineTo(aa.x+20, aa.y); ctx.moveTo(aa.x, aa.y-20); ctx.lineTo(aa.x, aa.y+20); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(aa.x-20, aa.y); ctx.lineTo(aa.x+20, aa.y);
+      ctx.moveTo(aa.x, aa.y-20); ctx.lineTo(aa.x, aa.y+20);
+      ctx.stroke();
       ctx.restore();
     }
 
     function drawTarget() {
       if (!target.alive) return;
       const p = worldToScreen(target);
-      ctx.save(); ctx.translate(p.x, p.y);
-      ctx.fillStyle = "#aeb8aa"; ctx.strokeStyle = "#0b100d"; ctx.lineWidth = 1.5;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.fillStyle = "#aeb8aa";
+      ctx.strokeStyle = "#0b100d";
+      ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.ellipse(0, 0, 9, 5, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#d9e3d3"; ctx.font = "12px system-ui"; ctx.fillText(`${Math.round(dist(ship,target))} m`, 14, -8);
+      ctx.fillStyle = "#d9e3d3";
+      ctx.font = "12px system-ui";
+      ctx.fillText(`${Math.round(dist(ship,target))} m`, 14, -8);
       ctx.restore();
     }
 
     function drawDestroyer(context, x, y, heading, scale = 1, wake=true) {
-      context.save(); context.translate(x, y); context.rotate(heading); context.scale(scale, scale);
-      context.lineWidth = 1.4 / scale; context.strokeStyle = "#0b100d"; context.fillStyle = "#8d978b";
-      context.beginPath(); context.moveTo(32,0); context.lineTo(20,-5.5); context.lineTo(-27,-6.5); context.lineTo(-36,-3); context.lineTo(-40,0); context.lineTo(-36,3); context.lineTo(-27,6.5); context.lineTo(20,5.5); context.closePath(); context.fill(); context.stroke();
-      context.fillStyle = "#c1c8bd"; context.fillRect(-6,-4,14,8); context.fillStyle = "#6f7a70"; context.fillRect(-21,-3,9,6);
-      drawTurret(context, 22, 0, guns.bearing - heading, scale); drawTurret(context, 10, 0, guns.bearing - heading, scale); drawTurret(context, -28, 0, guns.bearing - heading, scale);
-      if (wake) { context.strokeStyle = "rgba(220,230,215,.35)"; context.lineWidth = 1 / scale; context.beginPath(); context.moveTo(-39,-2); context.lineTo(-75,-10); context.moveTo(-39,2); context.lineTo(-75,10); context.stroke(); }
+      context.save();
+      context.translate(x, y);
+      context.rotate(heading);
+      context.scale(scale, scale);
+      context.lineWidth = 1.4 / scale;
+      context.strokeStyle = "#0b100d";
+      context.fillStyle = "#8d978b";
+      context.beginPath();
+      context.moveTo(32,0);
+      context.lineTo(20,-5.5);
+      context.lineTo(-27,-6.5);
+      context.lineTo(-36,-3);
+      context.lineTo(-40,0);
+      context.lineTo(-36,3);
+      context.lineTo(-27,6.5);
+      context.lineTo(20,5.5);
+      context.closePath();
+      context.fill();
+      context.stroke();
+      context.fillStyle = "#c1c8bd";
+      context.fillRect(-6,-4,14,8);
+      context.fillStyle = "#6f7a70";
+      context.fillRect(-21,-3,9,6);
+      drawTurret(context, 22, 0, guns.bearing - heading, scale);
+      drawTurret(context, 10, 0, guns.bearing - heading, scale);
+      drawTurret(context, -28, 0, guns.bearing - heading, scale);
+      if (wake) {
+        context.strokeStyle = "rgba(220,230,215,.35)";
+        context.lineWidth = 1 / scale;
+        context.beginPath();
+        context.moveTo(-39,-2); context.lineTo(-75,-10);
+        context.moveTo(-39,2); context.lineTo(-75,10);
+        context.stroke();
+      }
       context.restore();
     }
 
     function drawTurret(context, x, y, angle, scale) {
-      context.save(); context.translate(x, y); context.rotate(angle);
-      context.fillStyle = "#d7ddd1"; context.strokeStyle = "#0b100d"; context.lineWidth = 1 / scale;
+      context.save();
+      context.translate(x, y);
+      context.rotate(angle);
+      context.fillStyle = "#d7ddd1";
+      context.strokeStyle = "#0b100d";
+      context.lineWidth = 1 / scale;
       context.beginPath(); context.arc(0,0,3.2,0,Math.PI*2); context.fill(); context.stroke();
-      context.beginPath(); context.moveTo(0,0); context.lineTo(11,0); context.stroke(); context.restore();
+      context.beginPath(); context.moveTo(0,0); context.lineTo(11,0); context.stroke();
+      context.restore();
     }
 
     function drawEffects() {
       for (const flash of muzzleFlashes) {
-        const p = 1 - flash.t / 0.18; const pos = worldToScreen(flash);
-        ctx.save(); ctx.translate(pos.x,pos.y); ctx.rotate(flash.angle); ctx.fillStyle = `rgba(245,230,165,${p})`;
-        ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(20*p,-6*p); ctx.lineTo(29*p,0); ctx.lineTo(20*p,6*p); ctx.closePath(); ctx.fill(); ctx.restore();
+        const p = 1 - flash.t / 0.18;
+        const pos = worldToScreen(flash);
+        ctx.save();
+        ctx.translate(pos.x,pos.y);
+        ctx.rotate(flash.angle);
+        ctx.fillStyle = `rgba(245,230,165,${p})`;
+        ctx.beginPath();
+        ctx.moveTo(0,0); ctx.lineTo(20*p,-6*p); ctx.lineTo(29*p,0); ctx.lineTo(20*p,6*p);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
       }
+
       for (const s of shells) {
-        const p = worldToScreen(s); ctx.save(); ctx.fillStyle = "#f5e6a5";
-        ctx.beginPath(); ctx.arc(p.x, p.y - s.z / METERS_PER_PIXEL * 0.75, 3, 0, Math.PI*2); ctx.fill(); ctx.restore();
+        const p = worldToScreen(s);
+        ctx.save();
+        ctx.fillStyle = "#f5e6a5";
+        ctx.beginPath(); ctx.arc(p.x, p.y - s.z / METERS_PER_PIXEL * 0.75, 3, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
       }
+
       for (const sp of splashes) {
-        const pp = worldToScreen(sp); const t = sp.t / sp.maxT;
-        ctx.save(); ctx.globalAlpha = 1 - t; ctx.strokeStyle = sp.hit ? "#f3e8bd" : "#d8e8d5"; ctx.lineWidth = 1.6;
-        ctx.beginPath(); ctx.arc(pp.x, pp.y, 6 + t * 26, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+        const pp = worldToScreen(sp);
+        const t = sp.t / sp.maxT;
+        ctx.save();
+        ctx.globalAlpha = 1 - t;
+        ctx.strokeStyle = sp.hit ? "#f3e8bd" : "#d8e8d5";
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(pp.x, pp.y, 6 + t * 26, 0, Math.PI*2); ctx.stroke();
+        ctx.restore();
       }
     }
 
     function drawCircularScope(context, type) {
-      const w = context.canvas.width, h = context.canvas.height, size = Math.min(w,h), cx = w/2, cy = h/2, r = size*0.42;
+      const w = context.canvas.width;
+      const h = context.canvas.height;
+      const size = Math.min(w,h);
+      const cx = w/2;
+      const cy = h/2;
+      const r = size*0.42;
       const color = type === "sonar" ? "rgba(111,226,93,.85)" : "rgba(74,182,255,.85)";
       const range = type === "sonar" ? sonar.range : radar.range;
-      context.clearRect(0,0,w,h); context.save(); context.fillStyle = "#050806"; context.fillRect(0,0,w,h);
-      context.strokeStyle = color; context.lineWidth = 1;
-      for (let rr = r/4; rr <= r; rr += r/4) { context.globalAlpha = .45; context.beginPath(); context.arc(cx,cy,rr,0,Math.PI*2); context.stroke(); }
-      context.globalAlpha = .75; context.beginPath(); context.moveTo(cx-r,cy); context.lineTo(cx+r,cy); context.moveTo(cx,cy-r); context.lineTo(cx,cy+r); context.stroke();
-      context.globalAlpha = 1; context.beginPath(); context.arc(cx,cy,r,0,Math.PI*2); context.stroke();
-      context.fillStyle = "#d9e3d3"; context.beginPath(); context.arc(cx,cy,4,0,Math.PI*2); context.fill();
+      context.clearRect(0,0,w,h);
+      context.save();
+      context.fillStyle = "#050806";
+      context.fillRect(0,0,w,h);
+      context.strokeStyle = color;
+      context.lineWidth = 1;
+      for (let rr = r/4; rr <= r; rr += r/4) {
+        context.globalAlpha = .45;
+        context.beginPath(); context.arc(cx,cy,rr,0,Math.PI*2); context.stroke();
+      }
+      context.globalAlpha = .75;
+      context.beginPath();
+      context.moveTo(cx-r,cy); context.lineTo(cx+r,cy);
+      context.moveTo(cx,cy-r); context.lineTo(cx,cy+r);
+      context.stroke();
+      context.globalAlpha = 1;
+      context.beginPath(); context.arc(cx,cy,r,0,Math.PI*2); context.stroke();
+      context.fillStyle = "#d9e3d3";
+      context.beginPath(); context.arc(cx,cy,4,0,Math.PI*2); context.fill();
+
       if (target.alive && (type !== "sonar" || sonar.on)) {
-        const dx = target.x - ship.x, dy = target.y - ship.y, d = Math.hypot(dx,dy);
+        const dx = target.x - ship.x;
+        const dy = target.y - ship.y;
+        const d = Math.hypot(dx,dy);
         if (d <= range && (type !== "sonar" || d >= sonar.minRange)) {
           context.fillStyle = type === "sonar" ? "#6fe25d" : "#4ab6ff";
           context.beginPath(); context.arc(cx + dx/range*r, cy + dy/range*r, type === "sonar" ? 3 : 4, 0, Math.PI*2); context.fill();
         }
       }
-      context.fillStyle = type === "sonar" ? "#6fe25d" : "#4ab6ff"; context.font = "12px Courier New"; context.fillText(`${range} m`, 8, h - 10);
+      context.fillStyle = type === "sonar" ? "#6fe25d" : "#4ab6ff";
+      context.font = "12px Courier New";
+      context.fillText(`${range} m`, 8, h - 10);
       context.restore();
     }
 
     function drawShipPanel() {
-      const w = shipView.width, h = shipView.height;
-      shipCtx.clearRect(0,0,w,h); shipCtx.fillStyle = "#050806"; shipCtx.fillRect(0,0,w,h);
-      shipCtx.strokeStyle = "rgba(217,227,211,.16)"; shipCtx.beginPath(); shipCtx.moveTo(w/2,0); shipCtx.lineTo(w/2,h); shipCtx.moveTo(0,h/2); shipCtx.lineTo(w,h/2); shipCtx.stroke();
+      const w = shipView.width;
+      const h = shipView.height;
+      shipCtx.clearRect(0,0,w,h);
+      shipCtx.fillStyle = "#050806";
+      shipCtx.fillRect(0,0,w,h);
+      shipCtx.strokeStyle = "rgba(217,227,211,.16)";
+      shipCtx.beginPath();
+      shipCtx.moveTo(w/2,0); shipCtx.lineTo(w/2,h);
+      shipCtx.moveTo(0,h/2); shipCtx.lineTo(w,h/2);
+      shipCtx.stroke();
       drawDestroyer(shipCtx, w/2, h/2, ship.heading, Math.min(w,h)/72, false);
-      shipCtx.fillStyle = "#95a18f"; shipCtx.font = "12px Courier New"; shipCtx.fillText(`WIATR ${radToCourse(weather.windDir).toFixed(0)}° / ${weather.windSpeed.toFixed(1)} m/s`, 8, h-10);
+      shipCtx.fillStyle = "#95a18f";
+      shipCtx.font = "12px Courier New";
+      shipCtx.fillText(`WIATR ${radToCourse(weather.windDir).toFixed(0)}° / ${weather.windSpeed.toFixed(1)} m/s`, 8, h-10);
     }
 
     function drawMain() {
-      resizeAll(); updateCamera();
-      drawOcean(); drawTacticalOverlays(); drawTarget(); drawEffects();
-      const sp = worldToScreen(ship); drawDestroyer(ctx, sp.x, sp.y, ship.heading, 0.34, true);
-      drawCircularScope(sonarCtx,"sonar"); drawCircularScope(radarCtx,"radar"); drawShipPanel();
+      resizeAll();
+      updateCamera();
+      drawOcean();
+      drawTacticalOverlays();
+      drawTarget();
+      drawEffects();
+      const sp = worldToScreen(ship);
+      drawDestroyer(ctx, sp.x, sp.y, ship.heading, 0.16, true);
+      drawCircularScope(sonarCtx,"sonar");
+      drawCircularScope(radarCtx,"radar");
+      drawShipPanel();
     }
 
     function updateUI() {
@@ -758,26 +966,34 @@
 
       sonarStatus.textContent = sonar.on ? "WŁ." : "WYŁ.";
       sonarStatus.className = sonar.on ? "statusOn" : "statusOff";
+      sonarButton.textContent = sonar.on ? "WYŁĄCZ" : "WŁĄCZ";
       speedRead.textContent = order.name;
       rudderRead.textContent = `${Math.abs(ship.rudder).toFixed(0)}° ${rudderSide}`;
       courseRead.textContent = `${course.toFixed(0).padStart(3,"0")}°`;
       windShort.textContent = `${radToCourse(weather.windDir).toFixed(0)}° ${weather.windSpeed.toFixed(0)}m/s`;
-      weaponRead.innerHTML = `UZBROJENIE<br>TRYB: <span style="color:var(--yellow)">${guns.mode}</span><br>KĄT: <span style="color:var(--yellow)">${radToCourse(guns.bearing).toFixed(0).padStart(3,"0")}°</span><br>ZASIĘG: <span style="color:var(--yellow)">${Math.round(guns.range)} m</span><br>CZAS LOTU: <span style="color:var(--yellow)">${flightTime.toFixed(1)} s</span>`;
+      weaponRead.innerHTML = `UZBROJENIE<br>TRYB: <span style="color:var(--guns)">${guns.mode}</span><br>KĄT: <span style="color:var(--guns)">${radToCourse(guns.bearing).toFixed(0).padStart(3,"0")}°</span><br>ZASIĘG: <span style="color:var(--guns)">${Math.round(guns.range)} m</span><br>CZAS LOTU: <span style="color:var(--guns)">${flightTime.toFixed(1)} s</span>`;
 
       consolePanel.textContent =
-`SONAR ${sonar.on ? "WŁ." : "WYŁ."}  |  RADAR 9500 m  |  DZIAŁA ${guns.minRange}-${guns.maxRange} m  |  BŁĄD CEL.: ${miss} m  |  NOWY CEL: ${respawn}\n` +
-`WIATR: ${radToCourse(weather.windDir).toFixed(0)}° / ${weather.windSpeed.toFixed(1)} m/s  |  WPISYWANIE KURSU: ${courseInput || "---"}  |  ${lastMessage}\n` +
-`W/S prędkość, A/D ster +/-5°, Z ster zero, 000-359+Enter kurs, P sonar, F/G auto/manual, < > obrót dział, O/L zasięg, Spacja strzał`;
+`SONAR ${sonar.on ? "WŁ." : "WYŁ."}  |  RADAR ${radar.range} m  |  DZIAŁA ${guns.minRange}-${guns.maxRange} m  |  BŁĄD CEL.: ${miss} m  |  NOWY CEL: ${respawn}\n` +
+`WIATR: ${radToCourse(weather.windDir).toFixed(0)}° / ${weather.windSpeed.toFixed(1)} m/s  |  FALE: ${weather.wave.toFixed(1)}  |  DESZCZ: ${weather.rain.toFixed(1)}  |  ZOOM: ${zoom.toFixed(2)}x  |  SKALA: 1px=${METERS_PER_PIXEL.toFixed(1)}m  |  ${lastMessage}
+` +
+`W/S prędkość, A/D ster +/-5°, Z ster zero, 000-359+Enter kurs, P sonar, F/G auto/manual, < > płynny obrót dział, O/L zasięg, kółko myszy zoom, Spacja strzał`;
     }
 
     function loop(now) {
       const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
       weather.t += dt;
-      updateOrders(dt); updatePhysics(dt); updateSonar(dt); updateProjectiles(dt); respawnTarget(dt);
-      drawMain(); updateUI();
+      updateOrders(dt);
+      updatePhysics(dt);
+      updateSonar(dt);
+      updateProjectiles(dt);
+      respawnTarget(dt);
+      drawMain();
+      updateUI();
       requestAnimationFrame(loop);
     }
+
     requestAnimationFrame(loop);
   </script>
 </body>
