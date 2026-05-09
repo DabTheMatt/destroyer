@@ -149,3 +149,27 @@ aside {
   font-size: clamp(11px, 1.08vw, 14px);
   color: var(--text);
 }
+
+
+/* Map overlay buttons */
+.mapButton {
+  position: absolute;
+  z-index: 10;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(5,8,6,.78);
+  border: 1px solid rgba(217,227,211,.42);
+  border-radius: 8px;
+  color: #c0cab8;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 13px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.mapButton.on {
+  color: #c0cab8;
+  border-color: #c0cab8;
+  box-shadow: 0 0 10px rgba(192,202,184,.18);
+}

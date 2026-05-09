@@ -1,17 +1,9 @@
-# U-Booty i Niszczyciele — v3
+# U-Booty i Niszczyciele — v4
 
-Zmiany w v3:
-- zoom do kursora,
-- większy zoom maksymalny,
-- drobniejsze i gęstsze fale,
-- poprawiony sonar 14° bez błędu łuku 270°,
-- wyraźniejsze kręgi radaru,
-- subtelny wektorowy kilwater,
-- dym z kominów zależny od wiatru,
-- pogoda z widocznością,
-- przerywany krąg widoczności,
-- przewidywany tor okrętu w innym kolorze,
-- domyślnie ręczne działa,
-- F przełącza AUTO/MANUAL,
-- po nowym celu działa nie przechodzą same w AUTO,
-- prędkości wstecz.
+Zmiany w v4:
+- warstwa wiatru na mapie: ruchome strzałki zgodne z kierunkiem wiatru,
+- guzik WIATR: WŁ./WYŁ. u góry mapy,
+- kolor strzałek zgodny z informacją o wietrze/pogodzie,
+- 3 samoloty Fw 200 Condor,
+- automatyczny ogień przeciwlotniczy do samolotów w zasięgu,
+- zasięg AA ustawiony na 3810 m dla 40 mm Bofors jako praktyczny zasięg.

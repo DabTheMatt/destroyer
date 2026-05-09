@@ -20,12 +20,15 @@ const rudderRead = document.getElementById("rudderRead");
 const courseRead = document.getElementById("courseRead");
 const weaponRead = document.getElementById("weaponRead");
 const windShort = document.getElementById("windShort");
+const windLayerButton = document.getElementById("windLayerButton");
 
 const WORLD_W = 30000;
 const WORLD_H = 30000;
 const KNOT_TO_MS = 0.514444;
 const MS_TO_KNOT = 1 / KNOT_TO_MS;
 const SIM_SPEED_MULTIPLIER = 14;
+const AA_RANGE_M = 3810; // 40 mm Bofors practical AA range
+const AA_RATE_OF_FIRE = 8.5; // visual bursts per second in prototype
 
 let baseMetersPerPixel = 42;
 let METERS_PER_PIXEL = 42;
@@ -130,13 +133,24 @@ const rainDrops = Array.from({ length: 130 }, () => ({
   s: 0.55 + Math.random() * 1.25
 }));
 
-const aircraft = {
-  active: true,
-  x: -4000,
-  y: 4000,
-  heading: degToRad(28),
-  speed: 62
-};
+const aircraft = Array.from({ length: 3 }, (_, i) => makeCondor(i));
+const aaBursts = [];
+const aaTracers = [];
+let windLayerOn = true;
+let windAnimOffset = 0;
+
+function makeCondor(i = 0) {
+  const y = 2600 + Math.random() * (WORLD_H * 0.55);
+  return {
+    active: true,
+    x: -3500 - i * 4200,
+    y,
+    heading: degToRad(24 + Math.random() * 16),
+    speed: 55 + Math.random() * 12,
+    damaged: false,
+    aaCooldown: 0
+  };
+}
 
 const drag = { active: false, lastX: 0, lastY: 0 };
 
@@ -149,6 +163,7 @@ requestAnimationFrame(loop);
 function bindEvents() {
   window.addEventListener("resize", resizeAll);
   sonarButton.addEventListener("click", toggleSonar);
+  windLayerButton.addEventListener("click", toggleWindLayer);
 
   game.addEventListener("wheel", (event) => {
     event.preventDefault();
@@ -383,6 +398,12 @@ function toggleSonar() {
   lastMessage = sonar.on ? "Sonar aktywny. Wiązka QC: 14°." : "Sonar wyłączony.";
 }
 
+function toggleWindLayer() {
+  windLayerOn = !windLayerOn;
+  windLayerButton.textContent = windLayerOn ? "WIATR: WŁ." : "WIATR: WYŁ.";
+  windLayerButton.classList.toggle("on", windLayerOn);
+}
+
 // ---------- GAME STATE ----------
 
 function randomTarget() {
@@ -550,11 +571,58 @@ function updateWakeAndSmoke(dt) {
 }
 
 function updateAircraft(dt) {
-  aircraft.x += Math.cos(aircraft.heading) * aircraft.speed * dt * SIM_SPEED_MULTIPLIER;
-  aircraft.y += Math.sin(aircraft.heading) * aircraft.speed * dt * SIM_SPEED_MULTIPLIER;
-  if (aircraft.x > WORLD_W + 3000) {
-    aircraft.x = -3000;
-    aircraft.y = 2000 + Math.random() * (WORLD_H * 0.4);
+  for (let i = 0; i < aircraft.length; i++) {
+    const plane = aircraft[i];
+    plane.x += Math.cos(plane.heading) * plane.speed * dt * SIM_SPEED_MULTIPLIER;
+    plane.y += Math.sin(plane.heading) * plane.speed * dt * SIM_SPEED_MULTIPLIER;
+
+    if (plane.x > WORLD_W + 3500 || plane.y > WORLD_H + 2500) {
+      Object.assign(plane, makeCondor(i));
+    }
+
+    updateAAGunsForPlane(plane, dt);
+  }
+
+  updateAATracers(dt);
+}
+
+function updateAAGunsForPlane(plane, dt) {
+  plane.aaCooldown -= dt;
+  const d = dist(ship, plane);
+  if (d > AA_RANGE_M || plane.aaCooldown > 0) return;
+
+  plane.aaCooldown = 1 / AA_RATE_OF_FIRE;
+  const muzzle = {
+    x: ship.x + Math.cos(ship.heading) * (12 - Math.random() * 45),
+    y: ship.y + Math.sin(ship.heading) * (12 - Math.random() * 45)
+  };
+  const spread = 80 + d * 0.035;
+  const targetPoint = {
+    x: plane.x + (Math.random() - 0.5) * spread,
+    y: plane.y + (Math.random() - 0.5) * spread
+  };
+  aaTracers.push({ x1: muzzle.x, y1: muzzle.y, x2: targetPoint.x, y2: targetPoint.y, t: 0, maxT: 0.22 });
+
+  const hitChance = d < AA_RANGE_M * 0.55 ? 0.10 : 0.035;
+  if (Math.random() < hitChance) {
+    aaBursts.push({ x: plane.x, y: plane.y, t: 0, maxT: 0.55 });
+    plane.damaged = true;
+    if (Math.random() < 0.12) Object.assign(plane, makeCondor(Math.floor(Math.random() * 3)));
+    ensureAudio();
+    blip(420, 0.05, 0.06, "square");
+  } else {
+    aaBursts.push({ x: targetPoint.x, y: targetPoint.y, t: 0, maxT: 0.36 });
+  }
+}
+
+function updateAATracers(dt) {
+  for (let i = aaTracers.length - 1; i >= 0; i--) {
+    aaTracers[i].t += dt;
+    if (aaTracers[i].t > aaTracers[i].maxT) aaTracers.splice(i, 1);
+  }
+  for (let i = aaBursts.length - 1; i >= 0; i--) {
+    aaBursts[i].t += dt;
+    if (aaBursts[i].t > aaBursts[i].maxT) aaBursts.splice(i, 1);
   }
 }
 
@@ -716,6 +784,7 @@ function drawMain() {
   drawSensorEffects();
   drawEffects();
   drawAircraft();
+  drawAAFire();
   drawSmoke();
 
   const shipScreen = worldToScreen(ship);
@@ -744,6 +813,7 @@ function drawOcean() {
   drawVisibilityCircle();
   drawWake();
   drawRain();
+  drawWindLayer();
 }
 
 function drawWorldGrid() {
@@ -890,6 +960,52 @@ function drawRain() {
     ctx.stroke();
   }
 
+  ctx.restore();
+}
+
+
+function drawWindLayer() {
+  if (!windLayerOn) return;
+
+  const color = "#c0cab8"; // same family as weather info text
+  const w = game.width;
+  const h = game.height;
+  const spacing = 92;
+  const speed = weather.windSpeed * 2.6;
+  windAnimOffset = (windAnimOffset + 0.45) % spacing;
+
+  ctx.save();
+  ctx.globalAlpha = 0.72;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.4;
+
+  const dx = Math.cos(weather.windDir);
+  const dy = Math.sin(weather.windDir);
+  const px = -dy;
+  const py = dx;
+
+  // Arrows move in wind direction as a visual layer.
+  for (let row = -2; row < h / spacing + 3; row++) {
+    for (let col = -2; col < w / spacing + 3; col++) {
+      const baseX = col * spacing + px * row * 18 + dx * windAnimOffset;
+      const baseY = row * spacing + py * col * 10 + dy * windAnimOffset;
+      const x = ((baseX % (w + spacing)) + (w + spacing)) % (w + spacing) - spacing / 2;
+      const y = ((baseY % (h + spacing)) + (h + spacing)) % (h + spacing) - spacing / 2;
+      const len = 24;
+      ctx.beginPath();
+      ctx.moveTo(x - dx * len * 0.5, y - dy * len * 0.5);
+      ctx.lineTo(x + dx * len * 0.5, y + dy * len * 0.5);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(x + dx * len * 0.5, y + dy * len * 0.5);
+      ctx.lineTo(x + dx * len * 0.22 + px * 5, y + dy * len * 0.22 + py * 5);
+      ctx.lineTo(x + dx * len * 0.22 - px * 5, y + dy * len * 0.22 - py * 5);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
   ctx.restore();
 }
 
@@ -1132,13 +1248,17 @@ function drawTarget() {
 }
 
 function drawAircraft() {
-  const p = worldToScreen(aircraft);
+  for (const plane of aircraft) drawCondor(plane);
+}
+
+function drawCondor(plane) {
+  const p = worldToScreen(plane);
 
   ctx.save();
   ctx.translate(p.x, p.y);
-  ctx.rotate(aircraft.heading);
+  ctx.rotate(plane.heading);
   ctx.scale(0.7, 0.7);
-  ctx.strokeStyle = "rgba(230,230,230,.75)";
+  ctx.strokeStyle = plane.damaged ? "rgba(255,210,150,.82)" : "rgba(230,230,230,.75)";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(18, 0); ctx.lineTo(-16, 0);
@@ -1148,7 +1268,43 @@ function drawAircraft() {
   ctx.moveTo(8, 0); ctx.lineTo(18, -18);
   ctx.moveTo(8, 0); ctx.lineTo(18, 18);
   ctx.stroke();
+
+  if (plane.damaged) {
+    ctx.strokeStyle = "rgba(120,120,105,.55)";
+    ctx.beginPath();
+    ctx.moveTo(-14, 0);
+    ctx.lineTo(-34, 8);
+    ctx.stroke();
+  }
   ctx.restore();
+}
+
+function drawAAFire() {
+  for (const tr of aaTracers) {
+    const a = 1 - tr.t / tr.maxT;
+    const p1 = worldToScreen({ x: tr.x1, y: tr.y1 });
+    const p2 = worldToScreen({ x: tr.x2, y: tr.y2 });
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,222,125,${0.85 * a})`;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  for (const b of aaBursts) {
+    const a = 1 - b.t / b.maxT;
+    const p = worldToScreen(b);
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,230,160,${0.8 * a})`;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4 + b.t * 20, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawFletcher(context, x, y, heading, scale = 1, wakeOn = true) {
@@ -1475,7 +1631,7 @@ function updateUI() {
   consolePanel.textContent =
     `TRYB WPISYWANIA: ${inputMode === "AIM" ? "KĄT CELOWANIA" : "KURS OKRĘTU"}  |  WPIS: ${inputMode === "AIM" ? (angleInput || "---") : (courseInput || "---")}  |  SONAR ${sonar.on ? "WŁ." : "WYŁ."}  |  WIĄZKA QC 14°  |  RADAR ${radar.range} m  |  DZIAŁA ${guns.minRange}-${guns.maxRange} m\n` +
     `PRĘDKOŚĆ: ${(ship.speed * MS_TO_KNOT).toFixed(1)} w.  |  BŁĄD CEL.: ${miss} m  |  NOWY CEL: ${respawn}  |  ZOOM: ${zoom.toFixed(2)}x  |  SKALA: 1px=${METERS_PER_PIXEL.toFixed(1)}m  |  ${lastMessage}\n` +
-    `W/S prędkość także WSTECZ, A/D ster, Z zero, X stop, G wpis KURS/KĄT, F AUTO/MANUAL, < > obrót, O/L zasięg, [ ] sonar, Spacja strzał`;
+    `W/S prędkość także WSTECZ, A/D ster, Z zero, X stop, G wpis KURS/KĄT, F AUTO/MANUAL, < > obrót, O/L zasięg, [ ] sonar, Spacja strzał, guzik WIATR`;
 }
 
 // ---------- LOOP ----------
