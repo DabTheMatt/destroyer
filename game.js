@@ -29,7 +29,7 @@ let baseMetersPerPixel = 42;
 let METERS_PER_PIXEL = 42;
 let zoom = 1.0;
 const MIN_ZOOM = 0.38;
-const MAX_ZOOM = 80.0;
+const MAX_ZOOM = 55.0;
 
 const keysPressed = new Set();
 const keysHandled = new Set();
@@ -610,10 +610,10 @@ function sonarPing(contact) {
 function updateRadar(dt) {
   if (lastRadarContact) lastRadarContact.age += dt;
   if (lastRadarAirContact) lastRadarAirContact.age += dt;
+  for (const plane of getAircraftList()) if (plane && plane.radarRecentlyEchoed) plane.radarRecentlyEchoed = Math.max(0, plane.radarRecentlyEchoed - dt);
   radar.sweepCooldown -= dt;
   if (radar.sweepCooldown <= 0) {
     radarPings.push({ x: ship.x, y: ship.y, t: 0, echoPlayed: false });
-    for (const plane of (Array.isArray(aircraft) ? aircraft : [aircraft])) if (plane) plane.radarEchoThisSweep = false;
     radar.sweepCooldown = 6.0;
   }
 
@@ -630,19 +630,18 @@ function updateRadar(dt) {
       blip(1320, 0.06, 0.10, "square");
     }
     
-    for (const plane of (Array.isArray(aircraft) ? aircraft : [aircraft])) {
+    const planes = getAircraftList();
+    for (const plane of planes) {
       if (!plane || plane.active === false) continue;
       const planeDistance = dist(ping, plane);
-      if (planeDistance <= radar.range && radius >= planeDistance && !plane.radarEchoThisSweep) {
-        plane.radarEchoThisSweep = true;
+      if (!plane.radarEchoPlayedAt) plane.radarEchoPlayedAt = {};
+      const key = String(Math.round(ping.x)) + "-" + String(Math.round(ping.y)) + "-" + String(Math.round(ping.t * 10));
+      if (planeDistance <= radar.range && radius >= planeDistance && !plane.radarRecentlyEchoed) {
+        plane.radarRecentlyEchoed = 1.5;
         radarEchoes.push({ x: plane.x, y: plane.y, t: 0, air: true });
-        lastRadarAirContact = {
-          bearing: radToCourse(angleToPoint(ship, plane)),
-          range: Math.round(dist(ship, plane)),
-          age: 0
-        };
+        lastRadarAirContact = { bearing: radToCourse(angleToPoint(ship, plane)), range: Math.round(dist(ship, plane)), age: 0 };
         ensureAudio();
-        blip(1760, 0.045, 0.075, "square");
+        if (typeof radarContactSound === "function") radarContactSound(); else if (typeof blip === "function") blip(1620, 0.05, 0.08, "square");
       }
     }
 
@@ -653,6 +652,11 @@ function updateRadar(dt) {
     radarEchoes[i].t += dt;
     if (radarEchoes[i].t > 1.1) radarEchoes.splice(i, 1);
   }
+}
+
+
+function getAircraftList() {
+  return Array.isArray(aircraft) ? aircraft : [aircraft];
 }
 
 function updateAircraft(dt) {
@@ -785,7 +789,7 @@ function drawMain() {
   drawSmoke();
 
   const shipScreen = worldToScreen(ship);
-  drawFletcher(ctx, shipScreen.x, shipScreen.y, ship.heading, 0.18 * Math.sqrt(zoom), true);
+  drawFletcher(ctx, shipScreen.x, shipScreen.y, ship.heading, clamp(0.18 * Math.sqrt(zoom), 0.18, 7.5), true);
 
   drawMapInfoBoxes();
   drawMapHud();
@@ -807,7 +811,6 @@ function drawOcean() {
   drawWorldGrid();
   drawWorldWaves();
   drawVisibilityCircle();
-  drawVisibilityLabel();
   drawCloudMaskOutsideVisibility();
   drawWake();
   drawRain();
@@ -882,7 +885,7 @@ function drawVisibilityCircle() {
   const s = worldToScreen(ship);
   ctx.save();
   ctx.strokeStyle = "rgba(207,215,178,.70)";
-  ctx.lineWidth = 2.0;
+  ctx.lineWidth = 1.5;
   ctx.setLineDash([10, 8]);
   ctx.beginPath();
   ctx.arc(s.x, s.y, weather.visibility / METERS_PER_PIXEL, 0, Math.PI * 2);
@@ -907,28 +910,6 @@ function drawCloudMaskOutsideVisibility() {
 
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, game.width, game.height);
-  ctx.restore();
-}
-
-
-function drawVisibilityLabel() {
-  if (!aimInfoOn) return;
-  const center = worldToScreen(ship);
-  const angle = degToRad(315);
-  const range = weather.visibility || 5200;
-  const x = center.x + Math.cos(angle) * (range / METERS_PER_PIXEL);
-  const y = center.y + Math.sin(angle) * (range / METERS_PER_PIXEL);
-  const text = `WIDOCZNOŚĆ ${Math.round(range)}m`;
-  ctx.save();
-  ctx.font = "bold 13px Courier New";
-  ctx.fillStyle = "rgba(5,8,6,.72)";
-  ctx.strokeStyle = "rgba(207,215,178,.80)";
-  const w = ctx.measureText(text).width + 12;
-  roundedRect(ctx, x + 8, y - 18, w, 22, 5);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "#cfd7b2";
-  ctx.fillText(text, x + 14, y - 3);
   ctx.restore();
 }
 
@@ -1121,6 +1102,7 @@ function drawRangeCircles() {
   circle(guns.maxRange, "rgba(217,170,42,.92)", [10, 5], 1.7);
 
   drawRangeLabel(`RADAR ${radar.range}m`, radar.range, degToRad(40), "#4ab6ff");
+  drawRangeLabel(`WIDZ. ${Math.round(weather.visibility)}m`, weather.visibility, degToRad(80), "#cfd7b2");
   drawRangeLabel(`SONAR ${sonar.range}m`, sonar.range, degToRad(140), "#6fe25d");
   drawRangeLabel(`DZIAŁA ${guns.maxRange}m`, guns.maxRange, degToRad(220), "#d9aa2a");
   drawRangeLabel(`MIN DZ. ${guns.minRange}m`, guns.minRange, degToRad(300), "#d9aa2a");
@@ -1211,13 +1193,19 @@ function drawSonarBearingCone() {
   ctx.save();
   ctx.translate(s.x, s.y);
   ctx.rotate(angle);
-  ctx.fillStyle = "rgba(111,226,93,0.045)";
-  ctx.strokeStyle = "rgba(111,226,93,0.36)";
-  ctx.lineWidth = 1.5;
+
+  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, rangePx);
+  grad.addColorStop(0.00, "rgba(111,226,93,0.105)");
+  grad.addColorStop(0.45, "rgba(111,226,93,0.052)");
+  grad.addColorStop(1.00, "rgba(111,226,93,0.010)");
+
+  ctx.fillStyle = grad;
+  ctx.strokeStyle = "rgba(111,226,93,0.42)";
+  ctx.lineWidth = 1.4;
 
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  for (let a = -half; a <= half + 0.0001; a += sonar.beamWidth / 24) {
+  for (let a = -half; a <= half + 0.0001; a += sonar.beamWidth / 30) {
     ctx.lineTo(Math.cos(a) * rangePx, Math.sin(a) * rangePx);
   }
   ctx.closePath();
@@ -1229,6 +1217,25 @@ function drawSonarBearingCone() {
   ctx.moveTo(0, 0);
   ctx.lineTo(Math.cos(half) * rangePx, Math.sin(half) * rangePx);
   ctx.stroke();
+
+  // Stała, powoli rozchodząca się fala w stożku, żeby sonar był widoczny nawet między pingami.
+  const phase = ((weather.t || 0) * 420) % sonar.range;
+  for (let k = 0; k < 3; k++) {
+    const rr = (phase + k * sonar.range / 3) % sonar.range;
+    const alpha = 0.34 * (1 - rr / sonar.range);
+    ctx.strokeStyle = `rgba(111,226,93,${alpha})`;
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    const rPx = rr / METERS_PER_PIXEL;
+    for (let a = -half; a <= half + 0.0001; a += sonar.beamWidth / 32) {
+      const x = Math.cos(a) * rPx;
+      const y = Math.sin(a) * rPx;
+      if (a === -half) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
 
@@ -1574,16 +1581,20 @@ function drawCircularScope(context, type) {
   }
   
   if (type === "radar") {
-    for (const plane of (Array.isArray(aircraft) ? aircraft : [aircraft])) {
+    for (const plane of getAircraftList()) {
       if (!plane || plane.active === false) continue;
       const dx = plane.x - ship.x;
       const dy = plane.y - ship.y;
       const d = Math.hypot(dx, dy);
       if (d <= range) {
-        context.fillStyle = "#d9e3d3";
+        context.strokeStyle = "#4ab6ff";
+        context.fillStyle = "#4ab6ff";
         context.beginPath();
-        context.arc(cx + dx / range * r, cy + dy / range * r, 3, 0, Math.PI * 2);
-        context.fill();
+        context.moveTo(cx + dx / range * r - 4, cy + dy / range * r);
+        context.lineTo(cx + dx / range * r + 4, cy + dy / range * r);
+        context.moveTo(cx + dx / range * r, cy + dy / range * r - 4);
+        context.lineTo(cx + dx / range * r, cy + dy / range * r + 4);
+        context.stroke();
       }
     }
   }
@@ -1641,11 +1652,15 @@ function drawMapInfoBoxes() {
     `SEKTOR ${Math.floor(ship.x / 10000)}-${Math.floor(ship.y / 10000)}`
   ]);
 
-  const newestContact = [lastRadarContact, lastRadarAirContact].filter(Boolean).sort((a,b)=>a.age-b.age)[0];
-  const contactLines = newestContact && newestContact.age < 12
-    ? [`RADAR KONTAKT`, `NAMIAR ${newestContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${newestContact.range} m`, `OSTATNI ECHO ${newestContact.age.toFixed(1)} s`]
+  const contactLines = lastRadarContact && lastRadarContact.age < 12
+    ? [`RADAR KONTAKT`, `NAMIAR ${lastRadarContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${lastRadarContact.range} m`, `OD ECHA ${lastRadarContact.age.toFixed(1)} s`]
     : [`RADAR KONTAKT`, `BRAK`, `---`, `---`];
   drawInfoBox(14, 124, contactLines);
+
+  const airLines = lastRadarAirContact && lastRadarAirContact.age < 12
+    ? [`RADAR LOT`, `NAMIAR ${lastRadarAirContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${lastRadarAirContact.range} m`, `OD ECHA ${lastRadarAirContact.age.toFixed(1)} s`]
+    : [`RADAR LOT`, `BRAK`, `---`, `---`];
+  drawInfoBox(14, 236, airLines);
 
   drawInfoBox(game.width - 190 - 14, 12, [
     `POGODA ${weatherName(weather.rain)}`,
