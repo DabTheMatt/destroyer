@@ -3,273 +3,266 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>U-Booty i Niszczyciele — prototyp</title>
+  <title>U-Booty i Niszczyciele — ASCII</title>
   <style>
+    :root {
+      --bg: #000;
+      --fg: #f2f2f2;
+      --muted: #a8a8a8;
+    }
+
+    * { box-sizing: border-box; }
+
     body {
       margin: 0;
-      background: #07131f;
-      color: #e8f4ff;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "Courier New", Courier, monospace;
+      height: 100vh;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
     }
 
-    header {
-      width: min(960px, 100%);
-      padding: 16px;
-      box-sizing: border-box;
+    #screen {
+      flex: 1;
+      white-space: pre;
+      line-height: 1;
+      font-size: 15px;
+      padding: 8px 10px;
+      overflow: hidden;
+      user-select: none;
     }
 
-    h1 {
-      margin: 0 0 6px;
-      font-size: 24px;
-    }
-
-    p {
-      margin: 4px 0;
-      color: #b7d4ea;
-    }
-
-    canvas {
-      background: radial-gradient(circle at center, #123a55 0%, #071827 75%);
-      border: 2px solid #2a6b8d;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-      max-width: 96vw;
-      max-height: 72vh;
-    }
-
-    .panel {
-      width: min(960px, 100%);
-      padding: 12px 16px 24px;
-      box-sizing: border-box;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 10px;
-      color: #d8ecfa;
-    }
-
-    .card {
-      border: 1px solid rgba(170, 220, 255, 0.2);
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 10px;
-      padding: 10px;
-    }
-
-    kbd {
-      background: #0f2435;
-      border: 1px solid #6ba4c4;
-      border-radius: 4px;
-      padding: 1px 5px;
-      color: white;
+    #console {
+      border-top: 1px solid var(--fg);
+      padding: 10px 12px;
+      min-height: 138px;
+      white-space: pre-wrap;
+      font-size: 15px;
+      line-height: 1.25;
     }
   </style>
 </head>
 <body>
-  <header>
-    <h1>U-Booty i Niszczyciele — krok 1</h1>
-    <p>Cel prototypu: poruszaj niszczycielem i wykryj U-Boota sonarem.</p>
-  </header>
-
-  <canvas id="game" width="900" height="560"></canvas>
-
-  <section class="panel">
-    <div class="card">
-      <strong>Sterowanie</strong>
-      <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> albo strzałki — ruch niszczyciela.</p>
-    </div>
-    <div class="card">
-      <strong>Test kroku 1</strong>
-      <p>Sprawdź, czy okręt płynnie się porusza i czy zmienia się komunikat sonaru.</p>
-    </div>
-    <div class="card">
-      <strong>Status</strong>
-      <p id="status">Uruchamianie...</p>
-    </div>
-  </section>
+  <pre id="screen"></pre>
+  <div id="console"></div>
 
   <script>
-    const canvas = document.getElementById("game");
-    const ctx = canvas.getContext("2d");
-    const statusEl = document.getElementById("status");
+    const screen = document.getElementById("screen");
+    const consolePanel = document.getElementById("console");
 
-    const keys = new Set();
+    // Bardziej wertykalna mapa: mniej kolumn, więcej wierszy.
+    const COLS = 58;
+    const ROWS = 42;
 
-    const destroyer = {
-      x: 140,
-      y: 280,
-      radius: 16,
-      speed: 180,
-      heading: 0
+    const keysPressed = new Set();
+    const keysHandled = new Set();
+
+    const speedOrders = [
+      { name: "STOP", value: 0 },
+      { name: "1/3 NAPRZOD", value: 2.5 },
+      { name: "2/3 NAPRZOD", value: 5.0 },
+      { name: "CALA NAPRZOD", value: 7.5 },
+      { name: "FLANKA", value: 10.0 }
+    ];
+
+    const ship = {
+      x: 29,
+      y: 34,
+      heading: -Math.PI / 2,
+      speed: 0,
+      targetSpeedIndex: 0,
+      rudder: 0,
+      maxRudder: 30,
+      acceleration: 1.2
     };
 
     const uboat = {
-      x: 680,
-      y: 300,
-      radius: 14,
+      x: 30,
+      y: 8,
       detected: false
     };
 
-    const sonar = {
-      range: 170
-    };
+    const sonar = { range: 12 };
 
     let lastTime = performance.now();
 
     window.addEventListener("keydown", (event) => {
-      keys.add(event.key.toLowerCase());
+      const key = event.key.toLowerCase();
+      keysPressed.add(key);
+      if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) {
+        event.preventDefault();
+      }
     });
 
     window.addEventListener("keyup", (event) => {
-      keys.delete(event.key.toLowerCase());
+      const key = event.key.toLowerCase();
+      keysPressed.delete(key);
+      keysHandled.delete(key);
     });
+
+    function wasPressedOnce(key) {
+      if (keysPressed.has(key) && !keysHandled.has(key)) {
+        keysHandled.add(key);
+        return true;
+      }
+      return false;
+    }
 
     function clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
     }
 
     function distance(a, b) {
-      const dx = a.x - b.x;
-      const dy = a.y - b.y;
-      return Math.hypot(dx, dy);
+      return Math.hypot(a.x - b.x, a.y - b.y);
     }
 
-    function update(dt) {
-      let dx = 0;
-      let dy = 0;
+    function angleToGlyph(angle) {
+      const normalized = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      const sector = Math.round(normalized / (Math.PI / 4)) % 8;
+      return [">", "\\", "v", "/", "<", "\\", "^", "/"][sector];
+    }
 
-      if (keys.has("arrowup") || keys.has("w")) dy -= 1;
-      if (keys.has("arrowdown") || keys.has("s")) dy += 1;
-      if (keys.has("arrowleft") || keys.has("a")) dx -= 1;
-      if (keys.has("arrowright") || keys.has("d")) dx += 1;
+    function put(grid, x, y, char) {
+      const ix = Math.round(x);
+      const iy = Math.round(y);
+      if (ix >= 0 && ix < COLS && iy >= 0 && iy < ROWS) grid[iy][ix] = char;
+    }
 
-      if (dx !== 0 || dy !== 0) {
-        const length = Math.hypot(dx, dy);
-        dx /= length;
-        dy /= length;
+    function drawText(grid, x, y, text) {
+      for (let i = 0; i < text.length; i++) put(grid, x + i, y, text[i]);
+    }
 
-        destroyer.x += dx * destroyer.speed * dt;
-        destroyer.y += dy * destroyer.speed * dt;
-        destroyer.heading = Math.atan2(dy, dx);
+    function updateOrders() {
+      if (wasPressedOnce("arrowup") || wasPressedOnce("w")) {
+        ship.targetSpeedIndex = clamp(ship.targetSpeedIndex + 1, 0, speedOrders.length - 1);
       }
 
-      destroyer.x = clamp(destroyer.x, destroyer.radius, canvas.width - destroyer.radius);
-      destroyer.y = clamp(destroyer.y, destroyer.radius, canvas.height - destroyer.radius);
-
-      const d = distance(destroyer, uboat);
-      uboat.detected = d <= sonar.range;
-
-      if (uboat.detected) {
-        statusEl.textContent = `Kontakt sonarowy! Odległość: ${Math.round(d)} m.`;
-      } else {
-        statusEl.textContent = `Brak kontaktu. Szacowana cisza w sektorze. Odległość: ${Math.round(d)} m.`;
-      }
-    }
-
-    function drawGrid() {
-      ctx.save();
-      ctx.strokeStyle = "rgba(180, 230, 255, 0.08)";
-      ctx.lineWidth = 1;
-
-      for (let x = 0; x <= canvas.width; x += 45) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
+      if (wasPressedOnce("arrowdown") || wasPressedOnce("s")) {
+        ship.targetSpeedIndex = clamp(ship.targetSpeedIndex - 1, 0, speedOrders.length - 1);
       }
 
-      for (let y = 0; y <= canvas.height; y += 45) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
+      if (wasPressedOnce("arrowleft") || wasPressedOnce("a")) {
+        ship.rudder = clamp(ship.rudder - 5, -ship.maxRudder, ship.maxRudder);
       }
 
-      ctx.restore();
-    }
-
-    function drawSonar() {
-      ctx.save();
-      ctx.strokeStyle = uboat.detected ? "rgba(124, 255, 174, 0.55)" : "rgba(110, 195, 255, 0.28)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(destroyer.x, destroyer.y, sonar.range, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    function drawDestroyer() {
-      ctx.save();
-      ctx.translate(destroyer.x, destroyer.y);
-      ctx.rotate(destroyer.heading);
-
-      ctx.fillStyle = "#dbe9f4";
-      ctx.strokeStyle = "#0d2333";
-      ctx.lineWidth = 2;
-
-      ctx.beginPath();
-      ctx.moveTo(24, 0);
-      ctx.lineTo(-14, -12);
-      ctx.lineTo(-22, 0);
-      ctx.lineTo(-14, 12);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = "#6e8798";
-      ctx.fillRect(-4, -6, 12, 12);
-
-      ctx.restore();
-    }
-
-    function drawUboat() {
-      ctx.save();
-      ctx.translate(uboat.x, uboat.y);
-
-      ctx.globalAlpha = uboat.detected ? 1 : 0.14;
-      ctx.fillStyle = uboat.detected ? "#7cffae" : "#9ab4c4";
-      ctx.strokeStyle = "#031016";
-      ctx.lineWidth = 2;
-
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 30, 9, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillRect(-4, -15, 8, 10);
-
-      ctx.restore();
-    }
-
-    function drawLabels() {
-      ctx.save();
-      ctx.font = "14px system-ui";
-      ctx.fillStyle = "#e8f4ff";
-      ctx.fillText("Niszczyciel", destroyer.x + 24, destroyer.y - 20);
-
-      if (uboat.detected) {
-        ctx.fillStyle = "#7cffae";
-        ctx.fillText("U-Boot wykryty", uboat.x + 34, uboat.y - 20);
+      if (wasPressedOnce("arrowright") || wasPressedOnce("d")) {
+        ship.rudder = clamp(ship.rudder + 5, -ship.maxRudder, ship.maxRudder);
       }
 
-      ctx.restore();
+      if (wasPressedOnce(" ")) ship.rudder = 0;
+      if (wasPressedOnce("x")) ship.targetSpeedIndex = 0;
+    }
+
+    function updatePhysics(dt) {
+      const targetSpeed = speedOrders[ship.targetSpeedIndex].value;
+
+      if (ship.speed < targetSpeed) {
+        ship.speed = Math.min(targetSpeed, ship.speed + ship.acceleration * dt);
+      } else if (ship.speed > targetSpeed) {
+        ship.speed = Math.max(targetSpeed, ship.speed - ship.acceleration * dt);
+      }
+
+      // Stały ster daje stały skręt. Im większa prędkość i wychylenie, tym ciaśniejszy zwrot.
+      const speedFactor = ship.speed / 10;
+      const rudderFactor = ship.rudder / ship.maxRudder;
+      const turnRate = rudderFactor * speedFactor * 0.9;
+      ship.heading += turnRate * dt;
+
+      // Znakowa mapa jest wyższa niż szersza, więc ruch Y ma inną skalę.
+      ship.x += Math.cos(ship.heading) * ship.speed * dt * 1.55;
+      ship.y += Math.sin(ship.heading) * ship.speed * dt * 0.78;
+
+      // Zawijanie mapy na krawędziach, jak na dużym stole taktycznym.
+      if (ship.x < 2) ship.x = COLS - 3;
+      if (ship.x > COLS - 3) ship.x = 2;
+      if (ship.y < 2) ship.y = ROWS - 3;
+      if (ship.y > ROWS - 3) ship.y = 2;
+
+      uboat.detected = distance(ship, uboat) <= sonar.range;
     }
 
     function render() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawGrid();
-      drawSonar();
-      drawUboat();
-      drawDestroyer();
-      drawLabels();
+      const grid = Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => " "));
+
+      for (let x = 0; x < COLS; x++) {
+        put(grid, x, 0, "-");
+        put(grid, x, ROWS - 1, "-");
+      }
+      for (let y = 0; y < ROWS; y++) {
+        put(grid, 0, y, "|");
+        put(grid, COLS - 1, y, "|");
+      }
+      put(grid, 0, 0, "+"); put(grid, COLS - 1, 0, "+");
+      put(grid, 0, ROWS - 1, "+"); put(grid, COLS - 1, ROWS - 1, "+");
+
+      for (let x = 6; x < COLS - 6; x += 10) {
+        for (let y = 5; y < ROWS - 4; y += 6) put(grid, x, y, ".");
+      }
+
+      drawText(grid, 3, 1, "ATLANTYK / EKRAN TAKTYCZNY ASCII");
+
+      const sx = Math.round(ship.x);
+      const sy = Math.round(ship.y);
+
+      // Wektor kierunku przed okrętem.
+      const vx1 = ship.x + Math.cos(ship.heading) * 2;
+      const vy1 = ship.y + Math.sin(ship.heading) * 1;
+      const vx2 = ship.x + Math.cos(ship.heading) * 4;
+      const vy2 = ship.y + Math.sin(ship.heading) * 2;
+      const vx3 = ship.x + Math.cos(ship.heading) * 6;
+      const vy3 = ship.y + Math.sin(ship.heading) * 3;
+
+      put(grid, vx1, vy1, ".");
+      put(grid, vx2, vy2, ".");
+      put(grid, vx3, vy3, angleToGlyph(ship.heading));
+
+      put(grid, sx, sy, angleToGlyph(ship.heading));
+      drawText(grid, sx + 2, sy, "DD");
+
+      if (uboat.detected) {
+        put(grid, uboat.x, uboat.y, "U");
+        drawText(grid, uboat.x + 2, uboat.y, "KONTAKT");
+      } else {
+        put(grid, uboat.x, uboat.y, ".");
+      }
+
+      const d = distance(ship, uboat);
+      drawText(grid, 3, ROWS - 2, `${uboat.detected ? "SONAR: KONTAKT" : "SONAR: CISZA"} / DYSTANS ${Math.round(d)} hm`);
+
+      screen.textContent = grid.map(row => row.join("")).join("\n");
+
+      const order = speedOrders[ship.targetSpeedIndex];
+      const headingDeg = (((ship.heading * 180 / Math.PI) % 360) + 360) % 360;
+      const rudderSide = ship.rudder < 0 ? "LEWO " : ship.rudder > 0 ? "PRAWO" : "ZERO ";
+      const rudderAbs = Math.abs(ship.rudder).toFixed(0).padStart(2);
+
+      consolePanel.textContent =
+`KONSOLA STEROWANIA OKRETEM
+` +
+`------------------------------------------------------------
+` +
+`ROZKAZ MASZYN: ${order.name.padEnd(13)} | AKTUALNA PREDKOSC: ${ship.speed.toFixed(1).padStart(4)} w.
+` +
+`STER: ${rudderSide} ${rudderAbs}°            | KURS: ${headingDeg.toFixed(0).padStart(3)}°
+` +
+`SONAR: ${uboat.detected ? "KONTAKT ZANURZONY" : "BRAK KONTAKTU"}      | ZASIEG: ${sonar.range} hm
+` +
+`STEROWANIE: W/↑ = zwieksz rozkaz predkosci | S/↓ = zmniejsz rozkaz predkosci
+` +
+`            A/← = ster 5° w lewo          | D/→ = ster 5° w prawo
+` +
+`            SPACJA = ster zero            | X = STOP
+` +
+`TEST: ustaw 1/3 NAPRZOD i STER PRAWO 10°. Okret powinien stale zataczac luk/kolo.`;
     }
 
     function loop(now) {
       const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
-      update(dt);
+      updateOrders();
+      updatePhysics(dt);
       render();
       requestAnimationFrame(loop);
     }
