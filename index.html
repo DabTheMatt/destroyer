@@ -19,7 +19,8 @@
       grid-template-rows: minmax(0, 1fr) auto; gap: 5px; padding: 5px;
     }
     #gameWrap { min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #16221f; position: relative; }
-    #game { width: 100%; height: 100%; display: block; background: #172522; cursor: grab; }
+    #game { width: 100%; height: 100%; display: block; background: #172522; cursor: default; }
+    #game.aiming { cursor: crosshair; }
     #game.dragging { cursor: grabbing; }
     aside { min-width: 0; min-height: 0; display: grid; grid-template-rows: 1fr 1fr 1fr auto auto; gap: 5px; }
     .panel { min-height: 0; background: linear-gradient(180deg, #121812, #070b08); border: 1px solid var(--line); border-radius: 9px; padding: 6px; overflow: hidden; }
@@ -320,14 +321,14 @@
     function drawWaves() {
       const w = game.width, h = game.height;
       ctx.save();
-      ctx.strokeStyle = `rgba(205,220,205,${0.025 + weather.wave * 0.025})`;
+      ctx.strokeStyle = `rgba(205,220,205,${0.030 + weather.wave * 0.030})`;
       ctx.lineWidth = 1;
 
-      // Fale są zakotwiczone w świecie, nie płyną po ekranie.
-      // Dzięki temu ruch okrętu jest czytelny względem powierzchni morza.
-      const waveSpacingM = 720;
-      const waveLengthM = 520;
-      const ampPx = 1.8 + weather.wave * 1.4;
+      // Fale są zakotwiczone w świecie, tak jak siatka.
+      // Nie animujemy ich po ekranie; przesuwają się dlatego, że kamera podąża za okrętem.
+      const waveSpacingM = 620;
+      const waveLengthM = 460;
+      const ampPx = 2.0 + weather.wave * 1.2;
       const startY = Math.floor(camera.y / waveSpacingM) * waveSpacingM;
       const endY = camera.y + h * METERS_PER_PIXEL + waveSpacingM;
       const startX = Math.floor(camera.x / waveLengthM) * waveLengthM;
@@ -336,7 +337,7 @@
       for (let wy = startY; wy <= endY; wy += waveSpacingM) {
         ctx.beginPath();
         let first = true;
-        for (let wx = startX; wx <= endX; wx += 110) {
+        for (let wx = startX; wx <= endX; wx += 100) {
           const sx = (wx - camera.x) / METERS_PER_PIXEL;
           const sy = (wy - camera.y) / METERS_PER_PIXEL;
           const yy = sy + Math.sin(wx / waveLengthM * Math.PI * 2 + wy * 0.0007) * ampPx;
@@ -519,8 +520,66 @@
       if (target.alive && (type!=="sonar" || sonar.on)) { const dx=target.x-ship.x, dy=target.y-ship.y, d=Math.hypot(dx,dy); if (d<=range && (type!=="sonar" || d>=sonar.minRange)) { context.fillStyle=type==="sonar"?"#6fe25d":"#4ab6ff"; context.beginPath(); context.arc(cx+dx/range*r,cy+dy/range*r,type==="sonar"?3:4,0,Math.PI*2); context.fill(); } }
       context.fillStyle=type==="sonar"?"#6fe25d":"#4ab6ff"; context.font="12px Courier New"; context.fillText(`${range} m`,8,h-10); context.restore();
     }
-    function drawShipPanel() { const w=shipView.width,h=shipView.height; shipCtx.clearRect(0,0,w,h); shipCtx.fillStyle="#050806"; shipCtx.fillRect(0,0,w,h); shipCtx.strokeStyle="rgba(217,227,211,.16)"; shipCtx.beginPath(); shipCtx.moveTo(w/2,0); shipCtx.lineTo(w/2,h); shipCtx.moveTo(0,h/2); shipCtx.lineTo(w,h/2); shipCtx.stroke(); drawDestroyer(shipCtx,w/2,h/2,ship.heading,Math.min(w,h)/72,false); shipCtx.fillStyle="#95a18f"; shipCtx.font="12px Courier New"; shipCtx.fillText(`WIATR ${radToCourse(weather.windDir).toFixed(0)}° / ${weather.windSpeed.toFixed(1)} m/s`,8,h-10); }
-    function drawMain() { resizeAll(); updateCamera(); drawOcean(); drawTacticalOverlays(); drawTarget(); drawEffects(); const sp=worldToScreen(ship); drawDestroyer(ctx,sp.x,sp.y,ship.heading,0.16,true); drawCircularScope(sonarCtx,"sonar"); drawCircularScope(radarCtx,"radar"); drawShipPanel(); }
+    function drawShipPanel() {
+      const w = shipView.width, h = shipView.height;
+      shipCtx.clearRect(0,0,w,h);
+      shipCtx.fillStyle = "#050806";
+      shipCtx.fillRect(0,0,w,h);
+      shipCtx.strokeStyle = "rgba(217,227,211,.16)";
+      shipCtx.beginPath();
+      shipCtx.moveTo(w/2,0); shipCtx.lineTo(w/2,h);
+      shipCtx.moveTo(0,h/2); shipCtx.lineTo(w,h/2);
+      shipCtx.stroke();
+      const previewScale = Math.min(w, h) / 190;
+      drawDestroyer(shipCtx, w/2, h/2 - 2, ship.heading, previewScale, false);
+      shipCtx.fillStyle = "#95a18f";
+      shipCtx.font = "12px Courier New";
+      shipCtx.fillText(`WIATR ${radToCourse(weather.windDir).toFixed(0)}° / ${weather.windSpeed.toFixed(1)} m/s`,8,h-10);
+    }
+    function drawMapHud() {
+      const order = speedOrders[ship.targetSpeedIndex];
+      const course = radToCourse(ship.heading).toFixed(0).padStart(3,"0");
+      const rudderSide = ship.rudder < -0.5 ? "L" : ship.rudder > 0.5 ? "P" : "ZERO";
+      const text = `PRĘDKOŚĆ ${order.name} / ${ship.speed.toFixed(1)} m/s   STER ${Math.abs(ship.rudder).toFixed(0)}° ${rudderSide}   KURS ${course}°`;
+      ctx.save();
+      ctx.font = "bold 15px Courier New";
+      const metrics = ctx.measureText(text);
+      const padX = 14;
+      const boxW = metrics.width + padX * 2;
+      const boxH = 32;
+      const x = (game.width - boxW) / 2;
+      const y = game.height - boxH - 14;
+      ctx.fillStyle = "rgba(5,8,6,.72)";
+      ctx.strokeStyle = "rgba(217,227,211,.45)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(x, y, boxW, boxH, 8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#d9e3d3";
+      ctx.fillText(text, x + padX, y + 21);
+      ctx.restore();
+    }
+
+    function updateCursorMode() {
+      game.classList.toggle("aiming", inputMode === "AIM" && !drag.active);
+    }
+
+    function drawMain() {
+      resizeAll();
+      updateCamera();
+      updateCursorMode();
+      drawOcean();
+      drawTacticalOverlays();
+      drawTarget();
+      drawEffects();
+      const sp=worldToScreen(ship);
+      drawDestroyer(ctx,sp.x,sp.y,ship.heading,0.16,true);
+      drawMapHud();
+      drawCircularScope(sonarCtx,"sonar");
+      drawCircularScope(radarCtx,"radar");
+      drawShipPanel();
+    }
     function updateUI() {
       const course=radToCourse(ship.heading), order=speedOrders[ship.targetSpeedIndex], rudderSide=ship.rudder<-0.5?"L":ship.rudder>0.5?"P":"", aim=getAimPoint();
       const miss=target.alive?Math.round(Math.hypot(aim.x-target.x,aim.y-target.y)):"---", flightTime=ballisticFlightTime(guns.range), respawn=target.alive?"---":`${Math.max(0,targetRespawnTimer||0).toFixed(1)} s`;
