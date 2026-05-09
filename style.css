@@ -11,6 +11,7 @@
   --radar: #4ab6ff;
   --guns: #d9aa2a;
   --visibility: #cfd7b2;
+  --wind: #c0cab8;
 }
 
 body {
@@ -34,6 +35,7 @@ body {
   border-radius: 10px;
   overflow: hidden;
   background: #16221f;
+  position: relative;
 }
 
 #game {
@@ -46,6 +48,33 @@ body {
 
 #game.aiming { cursor: crosshair; }
 #game.dragging { cursor: grabbing; }
+
+.mapButton {
+  position: absolute;
+  z-index: 10;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-105%);
+  background: rgba(5,8,6,.78);
+  border: 1px solid rgba(217,227,211,.42);
+  border-radius: 8px;
+  color: var(--wind);
+  font-family: "Courier New", Courier, monospace;
+  font-size: 13px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mapButton.info {
+  transform: translateX(8%);
+  color: var(--guns);
+}
+
+.mapButton.on {
+  border-color: currentColor;
+  box-shadow: 0 0 10px rgba(192,202,184,.18);
+}
 
 aside {
   min-width: 0;
@@ -148,55 +177,4 @@ aside {
   line-height: 1.2;
   font-size: clamp(11px, 1.08vw, 14px);
   color: var(--text);
-}
-
-
-/* Map overlay buttons */
-.mapButton {
-  position: absolute;
-  z-index: 10;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(5,8,6,.78);
-  border: 1px solid rgba(217,227,211,.42);
-  border-radius: 8px;
-  color: #c0cab8;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 13px;
-  padding: 6px 10px;
-  cursor: pointer;
-}
-
-.mapButton.on {
-  color: #c0cab8;
-  border-color: #c0cab8;
-  box-shadow: 0 0 10px rgba(192,202,184,.18);
-}
-
-
-.mapButton {
-  position: absolute;
-  z-index: 10;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-105%);
-  background: rgba(5,8,6,.78);
-  border: 1px solid rgba(217,227,211,.42);
-  border-radius: 8px;
-  color: #c0cab8;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 13px;
-  padding: 6px 10px;
-  cursor: pointer;
-}
-
-.mapButton.info {
-  transform: translateX(8%);
-  color: #d9aa2a;
-}
-
-.mapButton.on {
-  border-color: currentColor;
-  box-shadow: 0 0 10px rgba(192,202,184,.18);
 }

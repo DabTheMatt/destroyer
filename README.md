@@ -1,10 +1,10 @@
-# U-Booty i Niszczyciele — v5
+# U-Booty i Niszczyciele — v6
 
-Zmiany:
-- przewidywany tor kończy się strzałką i etykietą czasu,
-- przełączany przyciskiem INFO opis punktu celowania: czas dolotu pocisku i odległość od celu,
-- sonar reaguje tylko na cele podwodne,
-- dodane podwodne cele testowe,
-- po zniszczeniu frachtowca zostaje ikona wraku,
-- trafienie wymaga dużo dokładniejszego celowania,
-- kilwater jest jednokolorowy, półprzezroczysty i narasta/zanika wraz z prędkością okrętu.
+Naprawione:
+- działa guzik WIATR i warstwa wiatru jest widoczna,
+- dym jest mniejszy i porusza się wolniej, realistyczniej z wiatrem,
+- siatka mapy ma odstęp 1000 m,
+- tor przewidywany jest bardziej przezroczysty,
+- stożek sonaru 14° jest wyraźny i obracany klawiszami [ oraz ],
+- poza kręgiem widoczności pojawiają się półprzezroczyste chmury,
+- fale są około 10x gęstsze i reagują wizualnie na wysokość fali z okna pogody.

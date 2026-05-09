@@ -3,11 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>U-Booty i Niszczyciele</title>
+  <title>U-Booty i Niszczyciele — v6</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main id="gameWrap"><button id="windLayerButton" class="mapButton on">WIATR: WŁ.</button><button id="aimInfoButton" class="mapButton info on">INFO: WŁ.</button><canvas id="game"></canvas></main>
+  <main id="gameWrap">
+    <button id="windLayerButton" class="mapButton on">WIATR: WŁ.</button>
+    <button id="aimInfoButton" class="mapButton info on">INFO: WŁ.</button>
+    <canvas id="game"></canvas>
+  </main>
 
   <aside>
     <section class="panel">
@@ -20,18 +24,12 @@
     </section>
 
     <section class="panel">
-      <div class="panelTitle">
-        <span>RADAR</span>
-        <span class="statusOn">WŁ.</span>
-      </div>
+      <div class="panelTitle"><span>RADAR</span><span class="statusOn">WŁ.</span></div>
       <canvas id="radar" class="scopeCanvas"></canvas>
     </section>
 
     <section class="panel">
-      <div class="panelTitle">
-        <span>NISZCZYCIEL / FLETCHER</span>
-        <span id="windShort">WIATR</span>
-      </div>
+      <div class="panelTitle"><span>NISZCZYCIEL / FLETCHER</span><span id="windShort">WIATR</span></div>
       <canvas id="shipView"></canvas>
     </section>
 
