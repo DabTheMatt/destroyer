@@ -29,7 +29,7 @@ let baseMetersPerPixel = 42;
 let METERS_PER_PIXEL = 42;
 let zoom = 1.0;
 const MIN_ZOOM = 0.38;
-const MAX_ZOOM = 18.0;
+const MAX_ZOOM = 55.0;
 
 const keysPressed = new Set();
 const keysHandled = new Set();
@@ -110,6 +110,7 @@ let courseInput = "";
 let angleInput = "";
 let inputMode = "COURSE";
 let lastMessage = "Gotowy. Sonar wyłączony.";
+let lastRadarContact = null;
 let audioCtx = null;
 let lastTime = performance.now();
 
@@ -345,6 +346,8 @@ function randomTarget() {
     beam: 18,
     heading: Math.random() * Math.PI * 2,
     radius: 70,
+    speed: 2.2 + Math.random() * 2.2,
+    turnTimer: 3 + Math.random() * 8,
     alive: true
   };
 }
@@ -543,6 +546,21 @@ function updateWakeAndSmoke(dt) {
   while (smokePuffs.length && smokePuffs[0].t > 18) smokePuffs.shift();
 }
 
+
+function updateSurfaceTarget(dt) {
+  if (!target.alive) return;
+  target.turnTimer -= dt;
+  if (target.turnTimer <= 0) {
+    target.heading += (Math.random() - 0.5) * degToRad(34);
+    target.speed = clamp(target.speed + (Math.random() - 0.5) * 1.2, 1.0, 5.4);
+    target.turnTimer = 5 + Math.random() * 12;
+  }
+  target.x += Math.cos(target.heading) * target.speed * dt * 4;
+  target.y += Math.sin(target.heading) * target.speed * dt * 4;
+  target.x = (target.x + WORLD_W) % WORLD_W;
+  target.y = (target.y + WORLD_H) % WORLD_H;
+}
+
 function updateSubmergedTargets(dt) {
   for (const sub of underwaterTargets) {
     if (!sub.alive) continue;
@@ -589,6 +607,7 @@ function sonarPing(contact) {
 }
 
 function updateRadar(dt) {
+  if (lastRadarContact) lastRadarContact.age += dt;
   radar.sweepCooldown -= dt;
   if (radar.sweepCooldown <= 0) {
     radarPings.push({ x: ship.x, y: ship.y, t: 0, echoPlayed: false });
@@ -603,6 +622,7 @@ function updateRadar(dt) {
     if (!ping.echoPlayed && target.alive && targetDistance <= radar.range && radius >= targetDistance) {
       ping.echoPlayed = true;
       radarEchoes.push({ x: target.x, y: target.y, t: 0 });
+      lastRadarContact = { bearing: radToCourse(angleToPoint(ship, target)), range: Math.round(dist(ship, target)), age: 0 };
       ensureAudio();
       blip(1320, 0.06, 0.10, "square");
     }
@@ -673,7 +693,7 @@ function updateProjectiles(dt) {
     shell.y = shell.startY + (shell.endY - shell.startY) * p;
     shell.z = Math.sin(p * Math.PI) * 260;
     if (p >= 1) {
-      const hit = target.alive && Math.hypot(shell.endX - target.x, shell.endY - target.y) < 38;
+      const hit = target.alive && Math.hypot(shell.endX - target.x, shell.endY - target.y) < 58;
       splashes.push({ x: shell.endX, y: shell.endY, t: 0, maxT: hit ? 1.4 : 1.0, hit });
       if (hit) {
         wrecks.push({ x: target.x, y: target.y, heading: target.heading, length: target.length, beam: target.beam, t: 0 });
@@ -776,7 +796,7 @@ function drawOcean() {
 function drawWorldGrid() {
   const w = game.width;
   const h = game.height;
-  const gridStepM = 1000;
+  const gridStepM = 10000;
   ctx.save();
   ctx.strokeStyle = "rgba(220,230,215,.22)";
   ctx.lineWidth = 1;
@@ -852,20 +872,20 @@ function drawVisibilityCircle() {
 function drawCloudMaskOutsideVisibility() {
   const s = worldToScreen(ship);
   const r = weather.visibility / METERS_PER_PIXEL;
-  const outer = Math.max(game.width, game.height) * 0.95;
+  const outer = Math.max(game.width, game.height) * 1.05;
 
   ctx.save();
 
-  // Delikatna warstwa poza widocznością z miękkim gradientem za linią widoczności.
-  const g = ctx.createRadialGradient(s.x, s.y, r * 0.88, s.x, s.y, Math.max(r * 1.55, outer));
+  // Ostrzejsze przejście: prawie czysto do linii widoczności,
+  // potem szybko wchodzi zasłona chmur.
+  const g = ctx.createRadialGradient(s.x, s.y, r * 0.96, s.x, s.y, Math.max(r * 1.18, outer));
   g.addColorStop(0.00, "rgba(190,196,182,0.00)");
-  g.addColorStop(0.18, "rgba(190,196,182,0.055)");
-  g.addColorStop(0.55, "rgba(190,196,182,0.135)");
-  g.addColorStop(1.00, "rgba(190,196,182,0.185)");
+  g.addColorStop(0.10, "rgba(190,196,182,0.16)");
+  g.addColorStop(0.30, "rgba(190,196,182,0.30)");
+  g.addColorStop(1.00, "rgba(190,196,182,0.42)");
 
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, game.width, game.height);
-
   ctx.restore();
 }
 
@@ -874,15 +894,15 @@ function drawWindLayer() {
   const color = "#c0cab8";
   const w = game.width;
   const h = game.height;
-  const spacing = 184; // 2x rzadziej
+  const spacing = 280; // jeszcze rzadziej
   const speedPx = Math.max(0.15, weather.windSpeed * 0.012);
   windAnimOffset = (windAnimOffset + speedPx) % spacing;
 
   ctx.save();
-  ctx.globalAlpha = 0.32;
+  ctx.globalAlpha = 0.18;
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
-  ctx.lineWidth = 1.15;
+  ctx.lineWidth = 1.0;
 
   const dx = Math.cos(weather.windDir);
   const dy = Math.sin(weather.windDir);
@@ -1020,6 +1040,25 @@ function drawPredictedTrack() {
   ctx.restore();
 }
 
+
+function drawRangeLabel(text, range, angle, color) {
+  if (!aimInfoOn) return;
+  const center = worldToScreen(ship);
+  const x = center.x + Math.cos(angle) * (range / METERS_PER_PIXEL);
+  const y = center.y + Math.sin(angle) * (range / METERS_PER_PIXEL);
+  ctx.save();
+  ctx.font = "bold 13px Courier New";
+  ctx.fillStyle = "rgba(5,8,6,.72)";
+  ctx.strokeStyle = color;
+  const w = ctx.measureText(text).width + 12;
+  roundedRect(ctx, x + 8, y - 18, w, 22, 5);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.fillText(text, x + 14, y - 3);
+  ctx.restore();
+}
+
 function drawRangeCircles() {
   const s = worldToScreen(ship);
   const circle = (range, color, dash = [], width = 1.6) => {
@@ -1037,6 +1076,11 @@ function drawRangeCircles() {
   circle(radar.range, "rgba(74,182,255,.95)", [9, 5], 2.2);
   circle(guns.minRange, "rgba(217,170,42,.72)", [8, 5], 1.4);
   circle(guns.maxRange, "rgba(217,170,42,.92)", [10, 5], 1.7);
+
+  drawRangeLabel(`RADAR ${radar.range}m`, radar.range, degToRad(40), "#4ab6ff");
+  drawRangeLabel(`SONAR ${sonar.range}m`, sonar.range, degToRad(140), "#6fe25d");
+  drawRangeLabel(`DZIAŁA ${guns.maxRange}m`, guns.maxRange, degToRad(220), "#d9aa2a");
+  drawRangeLabel(`MIN DZ. ${guns.minRange}m`, guns.minRange, degToRad(300), "#d9aa2a");
 }
 
 function drawArrowWorld(origin, angle, lengthM, label, color, dashed = false) {
@@ -1535,8 +1579,13 @@ function drawMapInfoBoxes() {
     `POZYCJA`,
     `X ${Math.round(ship.x)} m`,
     `Y ${Math.round(ship.y)} m`,
-    `SEKTOR ${Math.floor(ship.x / 1000)}-${Math.floor(ship.y / 1000)}`
+    `SEKTOR ${Math.floor(ship.x / 10000)}-${Math.floor(ship.y / 10000)}`
   ]);
+
+  const contactLines = lastRadarContact && lastRadarContact.age < 12
+    ? [`RADAR KONTAKT`, `NAMIAR ${lastRadarContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${lastRadarContact.range} m`, `WIEK ${lastRadarContact.age.toFixed(1)} s`]
+    : [`RADAR KONTAKT`, `BRAK`, `---`, `---`];
+  drawInfoBox(14, 124, contactLines);
 
   drawInfoBox(game.width - 190 - 14, 12, [
     `POGODA ${weatherName(weather.rain)}`,
@@ -1621,6 +1670,7 @@ function loop(now) {
   updateOrders(dt);
   updatePhysics(dt);
   updateWakeAndSmoke(dt);
+  updateSurfaceTarget(dt);
   updateSubmergedTargets(dt);
   updateAircraft(dt);
   updateSonar(dt);

@@ -1,11 +1,12 @@
-# U-Booty i Niszczyciele — v7
+# U-Booty i Niszczyciele — v8
 
 Zmiany:
-- chmury bez elips: delikatna warstwa z gradientowym przejściem poza zasięgiem widoczności,
-- strzałki wiatru 2x rzadsze, bardziej przezroczyste i z płynniejszą animacją,
-- pogoda zmienia się losowo i powoli: wiatr, deszcz, fala, widoczność,
-- widoczność zależy od pogody,
-- dodane okno prognozy pogody na +5 minut,
-- przewidywany tor skrócony do 30 sekund,
-- kręgi radaru rozchodzą się 2x rzadziej,
-- dodany stały, widoczny stożek sonaru 14° obracany klawiszami [ i ].
+- siatka mapy 10000 m,
+- strzałki wiatru rzadsze i bardziej przezroczyste,
+- INFO włącza/wyłącza podpisy zakresów oraz informacje przy punkcie celowania,
+- podpisy kręgów: radar, sonar, działa, min. zasięg dział,
+- ostrzejszy gradient widoczności i mniej przezroczysta zasłona chmur,
+- okno RADAR KONTAKT pod pozycją z namiarem, odległością i wiekiem kontaktu,
+- cel powierzchniowy porusza się powoli i losowo zmienia kurs,
+- trafienie wymaga nadal celowania, ale próg zwiększony z 38 m do 58 m,
+- większy maksymalny zoom, żeby okręt mógł zająć około pół ekranu.
