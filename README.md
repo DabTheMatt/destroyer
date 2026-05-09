@@ -1,10 +1,11 @@
-# U-Booty i Niszczyciele — v6
+# U-Booty i Niszczyciele — v7
 
-Naprawione:
-- działa guzik WIATR i warstwa wiatru jest widoczna,
-- dym jest mniejszy i porusza się wolniej, realistyczniej z wiatrem,
-- siatka mapy ma odstęp 1000 m,
-- tor przewidywany jest bardziej przezroczysty,
-- stożek sonaru 14° jest wyraźny i obracany klawiszami [ oraz ],
-- poza kręgiem widoczności pojawiają się półprzezroczyste chmury,
-- fale są około 10x gęstsze i reagują wizualnie na wysokość fali z okna pogody.
+Zmiany:
+- chmury bez elips: delikatna warstwa z gradientowym przejściem poza zasięgiem widoczności,
+- strzałki wiatru 2x rzadsze, bardziej przezroczyste i z płynniejszą animacją,
+- pogoda zmienia się losowo i powoli: wiatr, deszcz, fala, widoczność,
+- widoczność zależy od pogody,
+- dodane okno prognozy pogody na +5 minut,
+- przewidywany tor skrócony do 30 sekund,
+- kręgi radaru rozchodzą się 2x rzadziej,
+- dodany stały, widoczny stożek sonaru 14° obracany klawiszami [ i ].

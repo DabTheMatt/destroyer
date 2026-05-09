@@ -88,7 +88,20 @@ const weather = {
   wave: 0.34,
   windDir: degToRad(305),
   windSpeed: 14.5,
-  visibility: 5200
+  visibility: 5200,
+  targetRain: 0.28,
+  targetWave: 0.34,
+  targetWindDir: degToRad(305),
+  targetWindSpeed: 14.5,
+  changeTimer: 0
+};
+
+const forecast = {
+  rain: 0.32,
+  wave: 0.38,
+  windDir: degToRad(292),
+  windSpeed: 12.0,
+  visibility: 5600
 };
 
 let target = randomTarget();
@@ -360,6 +373,48 @@ function makeCondor(i = 0) {
   };
 }
 
+
+function updateWeather(dt) {
+  weather.changeTimer -= dt;
+
+  if (weather.changeTimer <= 0) {
+    // Losowe, powolne zmiany pogody: wiatr może przybrać, osłabnąć albo prawie ustać.
+    weather.targetWindDir += (Math.random() - 0.5) * degToRad(42);
+    weather.targetWindSpeed = clamp(weather.targetWindSpeed + (Math.random() - 0.48) * 5.5, 0.4, 22);
+    if (Math.random() < 0.16) weather.targetWindSpeed = Math.random() * 2.2; // cisza / prawie cisza
+
+    weather.targetRain = clamp(weather.targetRain + (Math.random() - 0.5) * 0.34, 0, 1);
+    weather.targetWave = clamp(0.12 + weather.targetWindSpeed / 28 + weather.targetRain * 0.18 + (Math.random() - 0.5) * 0.10, 0.05, 1);
+
+    updateForecast();
+    weather.changeTimer = 18 + Math.random() * 28;
+  }
+
+  const blend = 0.018 * dt;
+  weather.windDir += angleDiffRad(weather.targetWindDir, weather.windDir) * blend;
+  weather.windSpeed += (weather.targetWindSpeed - weather.windSpeed) * blend;
+  weather.rain += (weather.targetRain - weather.rain) * blend;
+  weather.wave += (weather.targetWave - weather.wave) * blend;
+
+  // Widoczność zależy od deszczu i fali; zmienia się łagodnie.
+  const desiredVisibility = clamp(8500 - weather.rain * 4700 - weather.wave * 1700 - Math.max(0, weather.windSpeed - 12) * 70, 1600, 9000);
+  weather.visibility += (desiredVisibility - weather.visibility) * 0.010 * dt;
+}
+
+function updateForecast() {
+  forecast.windDir = weather.targetWindDir + (Math.random() - 0.5) * degToRad(18);
+  forecast.windSpeed = clamp(weather.targetWindSpeed + (Math.random() - 0.5) * 3.0, 0.2, 24);
+  forecast.rain = clamp(weather.targetRain + (Math.random() - 0.5) * 0.22, 0, 1);
+  forecast.wave = clamp(0.12 + forecast.windSpeed / 28 + forecast.rain * 0.16, 0.05, 1);
+  forecast.visibility = clamp(8500 - forecast.rain * 4700 - forecast.wave * 1700 - Math.max(0, forecast.windSpeed - 12) * 70, 1600, 9000);
+}
+
+function weatherName(rain) {
+  if (rain > 0.66) return "DESZCZ";
+  if (rain > 0.25) return "MŻAWKA";
+  return "SUCHO";
+}
+
 function updateOrders(dt) {
   if (wasPressedOnce("arrowup") || wasPressedOnce("w")) ship.targetSpeedIndex = clamp(ship.targetSpeedIndex + 1, 0, speedOrders.length - 1);
   if (wasPressedOnce("arrowdown") || wasPressedOnce("s")) ship.targetSpeedIndex = clamp(ship.targetSpeedIndex - 1, 0, speedOrders.length - 1);
@@ -537,7 +592,7 @@ function updateRadar(dt) {
   radar.sweepCooldown -= dt;
   if (radar.sweepCooldown <= 0) {
     radarPings.push({ x: ship.x, y: ship.y, t: 0, echoPlayed: false });
-    radar.sweepCooldown = 3.0;
+    radar.sweepCooldown = 6.0;
   }
 
   for (let i = radarPings.length - 1; i >= 0; i--) {
@@ -682,6 +737,7 @@ function drawMain() {
   drawWrecks();
   drawTarget();
   drawSubmergedTargetsDebug();
+  drawSonarBearingCone();
   drawSensorEffects();
   drawEffects();
   drawAircraft();
@@ -796,27 +852,20 @@ function drawVisibilityCircle() {
 function drawCloudMaskOutsideVisibility() {
   const s = worldToScreen(ship);
   const r = weather.visibility / METERS_PER_PIXEL;
-  ctx.save();
-  ctx.fillStyle = "rgba(185,190,178,.20)";
-  ctx.beginPath();
-  ctx.rect(0, 0, game.width, game.height);
-  ctx.arc(s.x, s.y, r, 0, Math.PI * 2, true);
-  ctx.fill();
+  const outer = Math.max(game.width, game.height) * 0.95;
 
-  ctx.globalAlpha = 0.13;
-  ctx.fillStyle = "#d7d8ca";
-  const step = 150;
-  for (let y = -80; y < game.height + 120; y += step) {
-    for (let x = -80; x < game.width + 120; x += step) {
-      const cx = x + Math.sin(weather.t * 0.1 + y) * 20;
-      const cy = y + Math.cos(weather.t * 0.08 + x) * 20;
-      const d = Math.hypot(cx - s.x, cy - s.y);
-      if (d < r * 0.92) continue;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, 70, 28, 0.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
+  ctx.save();
+
+  // Delikatna warstwa poza widocznością z miękkim gradientem za linią widoczności.
+  const g = ctx.createRadialGradient(s.x, s.y, r * 0.88, s.x, s.y, Math.max(r * 1.55, outer));
+  g.addColorStop(0.00, "rgba(190,196,182,0.00)");
+  g.addColorStop(0.18, "rgba(190,196,182,0.055)");
+  g.addColorStop(0.55, "rgba(190,196,182,0.135)");
+  g.addColorStop(1.00, "rgba(190,196,182,0.185)");
+
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, game.width, game.height);
+
   ctx.restore();
 }
 
@@ -825,14 +874,15 @@ function drawWindLayer() {
   const color = "#c0cab8";
   const w = game.width;
   const h = game.height;
-  const spacing = 92;
-  windAnimOffset = (windAnimOffset + 0.55) % spacing;
+  const spacing = 184; // 2x rzadziej
+  const speedPx = Math.max(0.15, weather.windSpeed * 0.012);
+  windAnimOffset = (windAnimOffset + speedPx) % spacing;
 
   ctx.save();
-  ctx.globalAlpha = 0.78;
+  ctx.globalAlpha = 0.32;
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
-  ctx.lineWidth = 1.4;
+  ctx.lineWidth = 1.15;
 
   const dx = Math.cos(weather.windDir);
   const dy = Math.sin(weather.windDir);
@@ -841,15 +891,16 @@ function drawWindLayer() {
 
   for (let row = -2; row < h / spacing + 3; row++) {
     for (let col = -2; col < w / spacing + 3; col++) {
-      const baseX = col * spacing + px * row * 16 + dx * windAnimOffset;
-      const baseY = row * spacing + py * col * 9 + dy * windAnimOffset;
+      const baseX = col * spacing + px * row * 22 + dx * windAnimOffset;
+      const baseY = row * spacing + py * col * 12 + dy * windAnimOffset;
       const x = ((baseX % (w + spacing)) + (w + spacing)) % (w + spacing) - spacing / 2;
       const y = ((baseY % (h + spacing)) + (h + spacing)) % (h + spacing) - spacing / 2;
-      const len = 24;
+      const len = 28;
       ctx.beginPath();
       ctx.moveTo(x - dx * len * 0.5, y - dy * len * 0.5);
       ctx.lineTo(x + dx * len * 0.5, y + dy * len * 0.5);
       ctx.stroke();
+
       ctx.beginPath();
       ctx.moveTo(x + dx * len * 0.5, y + dy * len * 0.5);
       ctx.lineTo(x + dx * len * 0.22 + px * 5, y + dy * len * 0.22 + py * 5);
@@ -931,7 +982,7 @@ function drawTacticalOverlays() {
 function drawPredictedTrack() {
   if (Math.abs(ship.speed) < 0.3) return;
   let x = ship.x, y = ship.y, heading = ship.heading;
-  const secondsAhead = 60;
+  const secondsAhead = 30;
   const step = 2;
   const pts = [];
   for (let t = 0; t <= secondsAhead; t += step) {
@@ -1059,6 +1110,38 @@ function drawAimInfo() {
   ctx.fillStyle = "#d9aa2a";
   ctx.fillText(text1, aa.x + 27, aa.y + 31);
   ctx.fillText(text2, aa.x + 27, aa.y + 49);
+  ctx.restore();
+}
+
+
+function drawSonarBearingCone() {
+  if (!sonar.on) return;
+  const s = worldToScreen(ship);
+  const angle = sonar.bearing + ship.heading;
+  const rangePx = sonar.range / METERS_PER_PIXEL;
+  const half = sonar.beamWidth / 2;
+
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  ctx.rotate(angle);
+  ctx.fillStyle = "rgba(111,226,93,0.045)";
+  ctx.strokeStyle = "rgba(111,226,93,0.36)";
+  ctx.lineWidth = 1.5;
+
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  for (let a = -half; a <= half + 0.0001; a += sonar.beamWidth / 24) {
+    ctx.lineTo(Math.cos(a) * rangePx, Math.sin(a) * rangePx);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(Math.cos(-half) * rangePx, Math.sin(-half) * rangePx);
+  ctx.moveTo(0, 0);
+  ctx.lineTo(Math.cos(half) * rangePx, Math.sin(half) * rangePx);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -1448,9 +1531,28 @@ function drawMapHud() {
 }
 
 function drawMapInfoBoxes() {
-  drawInfoBox(14, 12, [`POZYCJA`, `X ${Math.round(ship.x)} m`, `Y ${Math.round(ship.y)} m`, `SEKTOR ${Math.floor(ship.x / 1000)}-${Math.floor(ship.y / 1000)}`]);
-  const weatherName = weather.rain > 0.5 ? "DESZCZ" : weather.rain > 0.18 ? "MŻAWKA" : "SUCHO";
-  drawInfoBox(game.width - 190 - 14, 12, [`POGODA ${weatherName}`, `WIATR ${radToCourse(weather.windDir).toFixed(0)}°`, `${weather.windSpeed.toFixed(1)} m/s`, `FALA ${weather.wave.toFixed(2)}`, `WIDZ. ${Math.round(weather.visibility)} m`], 190);
+  drawInfoBox(14, 12, [
+    `POZYCJA`,
+    `X ${Math.round(ship.x)} m`,
+    `Y ${Math.round(ship.y)} m`,
+    `SEKTOR ${Math.floor(ship.x / 1000)}-${Math.floor(ship.y / 1000)}`
+  ]);
+
+  drawInfoBox(game.width - 190 - 14, 12, [
+    `POGODA ${weatherName(weather.rain)}`,
+    `WIATR ${radToCourse(weather.windDir).toFixed(0)}°`,
+    `${weather.windSpeed.toFixed(1)} m/s`,
+    `FALA ${weather.wave.toFixed(2)}`,
+    `WIDZ. ${Math.round(weather.visibility)} m`
+  ], 190);
+
+  drawInfoBox(game.width - 190 - 14, 154, [
+    `PROG. +5 MIN`,
+    `${weatherName(forecast.rain)}`,
+    `WIATR ${radToCourse(forecast.windDir).toFixed(0)}°`,
+    `${forecast.windSpeed.toFixed(1)} m/s`,
+    `WIDZ. ${Math.round(forecast.visibility)} m`
+  ], 190);
 }
 
 function drawInfoBox(x, y, lines, width = 190) {
@@ -1514,6 +1616,7 @@ function loop(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
   weather.t += dt;
+  updateWeather(dt);
 
   updateOrders(dt);
   updatePhysics(dt);
