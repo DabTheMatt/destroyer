@@ -1,0 +1,173 @@
+* { box-sizing: border-box; }
+
+:root {
+  --bg: #0b100d;
+  --panel: #111711;
+  --panel2: #0a0f0b;
+  --line: #39463b;
+  --text: #d9e3d3;
+  --muted: #95a18f;
+  --sonar: #6fe25d;
+  --radar: #4ab6ff;
+  --guns: #d9aa2a;
+  --danger: #d77752;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(185px, 20vw, 245px);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 5px;
+  padding: 5px;
+}
+
+#gameWrap {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #16221f;
+  position: relative;
+}
+
+#game {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #172522;
+  cursor: default;
+}
+
+#game.aiming { cursor: crosshair; }
+#game.dragging { cursor: grabbing; }
+
+aside {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 1fr 1fr 1fr auto auto;
+  gap: 5px;
+}
+
+.panel {
+  min-height: 0;
+  background: linear-gradient(180deg, #121812, #070b08);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 6px;
+  overflow: hidden;
+}
+
+.panelTitle {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+
+.statusOn { color: var(--sonar); }
+.statusOff { color: #6d756b; }
+
+.scopeCanvas,
+#shipView {
+  width: 100%;
+  height: calc(100% - 20px);
+  display: block;
+  background: #050806;
+  border: 1px solid #253027;
+  border-radius: 7px;
+}
+
+.miniControls {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 5px;
+  min-height: 70px;
+}
+
+.controlCard {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 4px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  text-align: center;
+}
+
+.bigVal {
+  color: var(--sonar);
+  font-size: 15px;
+  margin-top: 4px;
+}
+
+.tinyButton {
+  background: #151d16;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--sonar);
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10px;
+  padding: 2px 5px;
+  cursor: pointer;
+}
+
+.tinyButton:active { transform: translateY(1px); }
+
+.weaponControls {
+  min-height: 78px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+#console {
+  grid-column: 1 / 3;
+  min-height: 74px;
+  max-height: 110px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #121812, #070b08);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-family: "Courier New", Courier, monospace;
+  white-space: pre-wrap;
+  line-height: 1.2;
+  font-size: clamp(11px, 1.08vw, 14px);
+  color: var(--text);
+}
+
+@media (max-width: 900px) {
+  body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 58vh auto auto;
+    overflow: auto;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  aside {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 170px 170px auto;
+  }
+
+  #console { grid-column: 1; }
+  .miniControls,
+  .weaponControls { grid-column: span 2; }
+}
