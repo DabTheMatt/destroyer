@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>U-Booty i Niszczyciele — prototyp</title>
+  <style>
+    body {
+      margin: 0;
+      background: #07131f;
+      color: #e8f4ff;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    header {
+      width: min(960px, 100%);
+      padding: 16px;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+    }
+
+    p {
+      margin: 4px 0;
+      color: #b7d4ea;
+    }
+
+    canvas {
+      background: radial-gradient(circle at center, #123a55 0%, #071827 75%);
+      border: 2px solid #2a6b8d;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      max-width: 96vw;
+      max-height: 72vh;
+    }
+
+    .panel {
+      width: min(960px, 100%);
+      padding: 12px 16px 24px;
+      box-sizing: border-box;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      color: #d8ecfa;
+    }
+
+    .card {
+      border: 1px solid rgba(170, 220, 255, 0.2);
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    kbd {
+      background: #0f2435;
+      border: 1px solid #6ba4c4;
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>U-Booty i Niszczyciele — krok 1</h1>
+    <p>Cel prototypu: poruszaj niszczycielem i wykryj U-Boota sonarem.</p>
+  </header>
+
+  <canvas id="game" width="900" height="560"></canvas>
+
+  <section class="panel">
+    <div class="card">
+      <strong>Sterowanie</strong>
+      <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> albo strzałki — ruch niszczyciela.</p>
+    </div>
+    <div class="card">
+      <strong>Test kroku 1</strong>
+      <p>Sprawdź, czy okręt płynnie się porusza i czy zmienia się komunikat sonaru.</p>
+    </div>
+    <div class="card">
+      <strong>Status</strong>
+      <p id="status">Uruchamianie...</p>
+    </div>
+  </section>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
+
+    const keys = new Set();
+
+    const destroyer = {
+      x: 140,
+      y: 280,
+      radius: 16,
+      speed: 180,
+      heading: 0
+    };
+
+    const uboat = {
+      x: 680,
+      y: 300,
+      radius: 14,
+      detected: false
+    };
+
+    const sonar = {
+      range: 170
+    };
+
+    let lastTime = performance.now();
+
+    window.addEventListener("keydown", (event) => {
+      keys.add(event.key.toLowerCase());
+    });
+
+    window.addEventListener("keyup", (event) => {
+      keys.delete(event.key.toLowerCase());
+    });
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function distance(a, b) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return Math.hypot(dx, dy);
+    }
+
+    function update(dt) {
+      let dx = 0;
+      let dy = 0;
+
+      if (keys.has("arrowup") || keys.has("w")) dy -= 1;
+      if (keys.has("arrowdown") || keys.has("s")) dy += 1;
+      if (keys.has("arrowleft") || keys.has("a")) dx -= 1;
+      if (keys.has("arrowright") || keys.has("d")) dx += 1;
+
+      if (dx !== 0 || dy !== 0) {
+        const length = Math.hypot(dx, dy);
+        dx /= length;
+        dy /= length;
+
+        destroyer.x += dx * destroyer.speed * dt;
+        destroyer.y += dy * destroyer.speed * dt;
+        destroyer.heading = Math.atan2(dy, dx);
+      }
+
+      destroyer.x = clamp(destroyer.x, destroyer.radius, canvas.width - destroyer.radius);
+      destroyer.y = clamp(destroyer.y, destroyer.radius, canvas.height - destroyer.radius);
+
+      const d = distance(destroyer, uboat);
+      uboat.detected = d <= sonar.range;
+
+      if (uboat.detected) {
+        statusEl.textContent = `Kontakt sonarowy! Odległość: ${Math.round(d)} m.`;
+      } else {
+        statusEl.textContent = `Brak kontaktu. Szacowana cisza w sektorze. Odległość: ${Math.round(d)} m.`;
+      }
+    }
+
+    function drawGrid() {
+      ctx.save();
+      ctx.strokeStyle = "rgba(180, 230, 255, 0.08)";
+      ctx.lineWidth = 1;
+
+      for (let x = 0; x <= canvas.width; x += 45) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+
+      for (let y = 0; y <= canvas.height; y += 45) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawSonar() {
+      ctx.save();
+      ctx.strokeStyle = uboat.detected ? "rgba(124, 255, 174, 0.55)" : "rgba(110, 195, 255, 0.28)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(destroyer.x, destroyer.y, sonar.range, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawDestroyer() {
+      ctx.save();
+      ctx.translate(destroyer.x, destroyer.y);
+      ctx.rotate(destroyer.heading);
+
+      ctx.fillStyle = "#dbe9f4";
+      ctx.strokeStyle = "#0d2333";
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.moveTo(24, 0);
+      ctx.lineTo(-14, -12);
+      ctx.lineTo(-22, 0);
+      ctx.lineTo(-14, 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#6e8798";
+      ctx.fillRect(-4, -6, 12, 12);
+
+      ctx.restore();
+    }
+
+    function drawUboat() {
+      ctx.save();
+      ctx.translate(uboat.x, uboat.y);
+
+      ctx.globalAlpha = uboat.detected ? 1 : 0.14;
+      ctx.fillStyle = uboat.detected ? "#7cffae" : "#9ab4c4";
+      ctx.strokeStyle = "#031016";
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 30, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillRect(-4, -15, 8, 10);
+
+      ctx.restore();
+    }
+
+    function drawLabels() {
+      ctx.save();
+      ctx.font = "14px system-ui";
+      ctx.fillStyle = "#e8f4ff";
+      ctx.fillText("Niszczyciel", destroyer.x + 24, destroyer.y - 20);
+
+      if (uboat.detected) {
+        ctx.fillStyle = "#7cffae";
+        ctx.fillText("U-Boot wykryty", uboat.x + 34, uboat.y - 20);
+      }
+
+      ctx.restore();
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawGrid();
+      drawSonar();
+      drawUboat();
+      drawDestroyer();
+      drawLabels();
+    }
+
+    function loop(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
+      lastTime = now;
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
