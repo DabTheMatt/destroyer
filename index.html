@@ -21,23 +21,10 @@
       padding: 8px;
     }
 
-    header {
-      grid-column: 1 / 3;
-      min-height: 34px;
-    }
+    header { grid-column: 1 / 3; min-height: 34px; }
 
-    h1 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 700;
-      color: #e7eee2;
-    }
-
-    .hint {
-      margin-top: 2px;
-      color: #aeb9aa;
-      font-size: 12px;
-    }
+    h1 { margin: 0; font-size: 18px; font-weight: 700; color: #e7eee2; }
+    .hint { margin-top: 2px; color: #aeb9aa; font-size: 12px; }
 
     #game {
       width: 100%;
@@ -50,7 +37,7 @@
 
     aside {
       display: grid;
-      grid-template-rows: 1fr 1fr;
+      grid-template-rows: 1fr 1fr 1fr;
       gap: 8px;
       min-height: 0;
     }
@@ -104,14 +91,9 @@
   <canvas id="game" width="1040" height="760"></canvas>
 
   <aside>
-    <div class="scopeBox">
-      <strong>SONAR</strong>
-      <canvas id="sonar" width="230" height="260"></canvas>
-    </div>
-    <div class="scopeBox">
-      <strong>RADAR</strong>
-      <canvas id="radar" width="230" height="260"></canvas>
-    </div>
+    <div class="scopeBox"><strong>SONAR</strong><canvas id="sonar" width="230" height="220"></canvas></div>
+    <div class="scopeBox"><strong>RADAR</strong><canvas id="radar" width="230" height="220"></canvas></div>
+    <div class="scopeBox"><strong>NISZCZYCIEL</strong><canvas id="shipView" width="230" height="220"></canvas></div>
   </aside>
 
   <div id="console"></div>
@@ -123,6 +105,8 @@
     const sonarCtx = sonarCanvas.getContext("2d");
     const radarCanvas = document.getElementById("radar");
     const radarCtx = radarCanvas.getContext("2d");
+    const shipViewCanvas = document.getElementById("shipView");
+    const shipViewCtx = shipViewCanvas.getContext("2d");
     const consolePanel = document.getElementById("console");
 
     const keysPressed = new Set();
@@ -136,9 +120,12 @@
       { name: "FLANKA", value: 108 }
     ];
 
+    const WORLD_W = 3600;
+    const WORLD_H = 3600;
+
     const ship = {
-      x: 520,
-      y: 590,
+      x: WORLD_W / 2,
+      y: WORLD_H * 0.72,
       heading: degToRad(0),
       speed: 0,
       targetSpeedIndex: 0,
@@ -149,19 +136,23 @@
       autopilot: false
     };
 
+    const camera = { x: 0, y: 0, anchorX: 0.5, anchorY: 0.66 };
+
     const guns = {
       mode: "AUTO",
       bearing: degToRad(0),
       range: 330,
       minRange: 120,
-      maxRange: 620,
+      maxRange: 900,
       reload: 0,
       reloadTime: 0.9
     };
 
-    const target = randomTarget();
-    const sonar = { range: 230 };
-    const radar = { range: 620 };
+    let target = randomTarget();
+    let targetRespawnTimer = null;
+
+    const sonar = { range: 360 };
+    const radar = { range: 1100 };
     const shells = [];
     const splashes = [];
     const muzzleFlashes = [];
@@ -173,10 +164,8 @@
     window.addEventListener("keydown", (event) => {
       const key = event.key.toLowerCase();
       keysPressed.add(key);
-
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault();
       if (event.key === " ") event.preventDefault();
-
       if (/^[0-9]$/.test(event.key)) courseInput = (courseInput + event.key).slice(-3);
 
       if (event.key === "Enter" && courseInput.length > 0) {
@@ -203,13 +192,25 @@
     });
 
     function randomTarget() {
+      const margin = 420;
       return {
-        x: 140 + Math.random() * 760,
-        y: 90 + Math.random() * 360,
-        radius: 18,
+        x: margin + Math.random() * (WORLD_W - margin * 2),
+        y: margin + Math.random() * (WORLD_H - margin * 2),
+        radius: 24,
         alive: true,
         name: "CEL TESTOWY"
       };
+    }
+
+    function respawnTargetIfNeeded(dt) {
+      if (target.alive) return;
+      if (targetRespawnTimer === null) targetRespawnTimer = 10;
+      targetRespawnTimer -= dt;
+      if (targetRespawnTimer <= 0) {
+        target = randomTarget();
+        targetRespawnTimer = null;
+        lastMessage = "Nowy cel testowy pojawił się na radarze.";
+      }
     }
 
     function wasPressedOnce(key) {
@@ -224,9 +225,17 @@
     function radToCourse(rad) { return (((rad * 180 / Math.PI) + 90) % 360 + 360) % 360; }
     function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
     function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-    function angleDiffRad(target, current) { return Math.atan2(Math.sin(target - current), Math.cos(target - current)); }
-    function angleDiffDeg(target, current) { return ((target - current + 540) % 360) - 180; }
+    function angleDiffRad(targetAngle, current) { return Math.atan2(Math.sin(targetAngle - current), Math.cos(targetAngle - current)); }
+    function angleDiffDeg(targetCourse, currentCourse) { return ((targetCourse - currentCourse + 540) % 360) - 180; }
     function angleToPoint(from, to) { return Math.atan2(to.y - from.y, to.x - from.x); }
+
+    function worldToScreen(p) { return { x: p.x - camera.x, y: p.y - camera.y }; }
+    function screenToWorld(p) { return { x: p.x + camera.x, y: p.y + camera.y }; }
+
+    function updateCamera() {
+      camera.x = ship.x - canvas.width * camera.anchorX;
+      camera.y = ship.y - canvas.height * camera.anchorY;
+    }
 
     function updateOrders(dt) {
       if (wasPressedOnce("arrowup") || wasPressedOnce("w")) ship.targetSpeedIndex = clamp(ship.targetSpeedIndex + 1, 0, speedOrders.length - 1);
@@ -242,20 +251,18 @@
       if (wasPressedOnce("f")) { guns.mode = "AUTO"; lastMessage = "Artyleria: tryb automatyczny."; }
       if (wasPressedOnce("g")) { guns.mode = "MANUAL"; lastMessage = "Artyleria: tryb manualny."; }
 
-      if (wasPressedOnce(" ")) {
-        if (courseInput.length === 0) fireGun();
-      }
+      if (wasPressedOnce(" ") && courseInput.length === 0) fireGun();
 
       if (wasPressedOnce(",") || wasPressedOnce("<")) guns.bearing -= 0.08;
       if (wasPressedOnce(".") || wasPressedOnce(">")) guns.bearing += 0.08;
-      if (wasPressedOnce("o")) guns.range = clamp(guns.range + 25, guns.minRange, guns.maxRange);
-      if (wasPressedOnce("l")) guns.range = clamp(guns.range - 25, guns.minRange, guns.maxRange);
+      if (wasPressedOnce("o")) guns.range = clamp(guns.range + 35, guns.minRange, guns.maxRange);
+      if (wasPressedOnce("l")) guns.range = clamp(guns.range - 35, guns.minRange, guns.maxRange);
 
       if (guns.mode === "AUTO" && target.alive) {
         const desired = angleToPoint(ship, target);
         const diff = angleDiffRad(desired, guns.bearing);
         guns.bearing += clamp(diff, -1.6 * dt, 1.6 * dt);
-        guns.range += clamp(distance(ship, target) - guns.range, -120 * dt, 120 * dt);
+        guns.range += clamp(distance(ship, target) - guns.range, -160 * dt, 160 * dt);
       }
     }
 
@@ -283,10 +290,10 @@
       ship.x += Math.cos(ship.heading) * ship.speed * dt;
       ship.y += Math.sin(ship.heading) * ship.speed * dt;
 
-      if (ship.x < -30) ship.x = canvas.width + 30;
-      if (ship.x > canvas.width + 30) ship.x = -30;
-      if (ship.y < -30) ship.y = canvas.height + 30;
-      if (ship.y > canvas.height + 30) ship.y = -30;
+      if (ship.x < 0) ship.x = WORLD_W;
+      if (ship.x > WORLD_W) ship.x = 0;
+      if (ship.y < 0) ship.y = WORLD_H;
+      if (ship.y > WORLD_H) ship.y = 0;
     }
 
     function updateProjectiles(dt) {
@@ -304,7 +311,8 @@
           const hitDistance = target.alive ? Math.hypot(s.endX - target.x, s.endY - target.y) : Infinity;
           if (hitDistance < target.radius + 18) {
             target.alive = false;
-            lastMessage = "Trafienie! Cel testowy zniszczony.";
+            targetRespawnTimer = 10;
+            lastMessage = "Trafienie! Nowy cel za 10 sekund.";
             splashes.push({ x: s.endX, y: s.endY, t: 0, maxT: 1.2, hit: true });
           } else {
             lastMessage = "Upadek pocisku w wodę.";
@@ -330,47 +338,44 @@
       const aim = getAimPoint();
       const start = getForwardGunPosition();
       shells.push({
-        startX: start.x,
-        startY: start.y,
-        endX: aim.x,
-        endY: aim.y,
-        x: start.x,
-        y: start.y,
-        z: 0,
-        t: 0,
-        flightTime: 0.75 + guns.range / 900
+        startX: start.x, startY: start.y,
+        endX: aim.x, endY: aim.y,
+        x: start.x, y: start.y, z: 0, t: 0,
+        flightTime: 0.75 + guns.range / 1200
       });
       muzzleFlashes.push({ x: start.x, y: start.y, angle: guns.bearing, t: 0 });
       guns.reload = guns.reloadTime;
       lastMessage = "Ogień!";
     }
 
-    function getAimPoint() {
-      return {
-        x: ship.x + Math.cos(guns.bearing) * guns.range,
-        y: ship.y + Math.sin(guns.bearing) * guns.range
-      };
-    }
+    function getAimPoint() { return { x: ship.x + Math.cos(guns.bearing) * guns.range, y: ship.y + Math.sin(guns.bearing) * guns.range }; }
+    function getForwardGunPosition() { return { x: ship.x + Math.cos(ship.heading) * 18, y: ship.y + Math.sin(ship.heading) * 18 }; }
 
-    function getForwardGunPosition() {
-      return {
-        x: ship.x + Math.cos(ship.heading) * 30,
-        y: ship.y + Math.sin(ship.heading) * 30
-      };
-    }
-
-    function drawGrid() {
+    function drawWorldGrid() {
       ctx.save();
-      ctx.strokeStyle = "rgba(225,238,220,.08)";
+      ctx.strokeStyle = "rgba(225,238,220,.075)";
       ctx.lineWidth = 1;
-      for (let x = 0; x <= canvas.width; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
-      for (let y = 0; y <= canvas.height; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+      const step = 120;
+      const startX = Math.floor(camera.x / step) * step;
+      const endX = camera.x + canvas.width + step;
+      const startY = Math.floor(camera.y / step) * step;
+      const endY = camera.y + canvas.height + step;
+
+      for (let wx = startX; wx <= endX; wx += step) {
+        const sx = Math.round(wx - camera.x);
+        ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, canvas.height); ctx.stroke();
+      }
+      for (let wy = startY; wy <= endY; wy += step) {
+        const sy = Math.round(wy - camera.y);
+        ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(canvas.width, sy); ctx.stroke();
+      }
       ctx.restore();
     }
 
-    function drawArrow(x, y, angle, length, label, dashed = false) {
+    function drawWorldArrow(worldX, worldY, angle, length, label, dashed = false) {
+      const p = worldToScreen({ x: worldX, y: worldY });
       ctx.save();
-      ctx.translate(x, y);
+      ctx.translate(p.x, p.y);
       ctx.rotate(angle);
       ctx.strokeStyle = "#dfe8dc";
       ctx.fillStyle = "#dfe8dc";
@@ -386,170 +391,186 @@
     }
 
     function drawSensorsAndVectors() {
+      const sp = worldToScreen(ship);
       ctx.save();
-      ctx.strokeStyle = "rgba(210,230,205,.16)";
+      ctx.strokeStyle = "rgba(210,230,205,.14)";
       ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(ship.x, ship.y, sonar.range, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = "rgba(210,230,205,.08)";
-      ctx.beginPath(); ctx.arc(ship.x, ship.y, radar.range, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(sp.x, sp.y, sonar.range, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = "rgba(210,230,205,.06)";
+      ctx.beginPath(); ctx.arc(sp.x, sp.y, radar.range, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
 
       if (Math.abs(ship.rudder) > 1 && ship.speed > 3) {
         const predicted = ship.heading + (ship.rudder / ship.maxRudder) * (ship.speed / 108) * 0.95;
-        drawArrow(ship.x, ship.y, predicted, 95, "przewidywany", true);
+        drawWorldArrow(ship.x, ship.y, predicted, 70, "przewidywany", true);
       }
-      if (ship.orderedCourse !== null) drawArrow(ship.x, ship.y, degToRad(ship.orderedCourse), 120, `kurs ${Math.round(ship.orderedCourse).toString().padStart(3, "0")}`, true);
-      drawArrow(ship.x, ship.y, ship.heading, 95, "kurs");
+      if (ship.orderedCourse !== null) drawWorldArrow(ship.x, ship.y, degToRad(ship.orderedCourse), 92, `kurs ${Math.round(ship.orderedCourse).toString().padStart(3, "0")}`, true);
+      drawWorldArrow(ship.x, ship.y, ship.heading, 70, "kurs");
     }
 
     function drawGunnery() {
       const aim = getAimPoint();
+      const s = worldToScreen(ship);
+      const a = worldToScreen(aim);
       ctx.save();
       ctx.strokeStyle = "rgba(245,245,230,.55)";
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 8]);
-      ctx.beginPath(); ctx.moveTo(ship.x, ship.y); ctx.lineTo(aim.x, aim.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(a.x, a.y); ctx.stroke();
       ctx.setLineDash([]);
       ctx.strokeStyle = "#f1f1df";
-      ctx.beginPath(); ctx.arc(aim.x, aim.y, 16, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(aim.x - 24, aim.y); ctx.lineTo(aim.x + 24, aim.y); ctx.moveTo(aim.x, aim.y - 24); ctx.lineTo(aim.x, aim.y + 24); ctx.stroke();
+      ctx.beginPath(); ctx.arc(a.x, a.y, 13, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(a.x - 20, a.y); ctx.lineTo(a.x + 20, a.y); ctx.moveTo(a.x, a.y - 20); ctx.lineTo(a.x, a.y + 20); ctx.stroke();
       ctx.fillStyle = "#f1f1df";
       ctx.font = "13px system-ui";
-      ctx.fillText("punkt trafienia", aim.x + 20, aim.y - 12);
+      ctx.fillText("punkt trafienia", a.x + 18, a.y - 10);
       ctx.restore();
     }
 
     function drawTarget() {
       if (!target.alive) return;
+      const p = worldToScreen(target);
+      if (p.x < -80 || p.x > canvas.width + 80 || p.y < -80 || p.y > canvas.height + 80) return;
       ctx.save();
-      ctx.translate(target.x, target.y);
+      ctx.translate(p.x, p.y);
       ctx.fillStyle = "#b7beb0";
       ctx.strokeStyle = "#151c16";
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 24, 13, 0, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(0, 0, 18, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = "#879080";
-      ctx.fillRect(-8, -9, 16, 18);
+      ctx.fillRect(-6, -7, 12, 14);
       ctx.fillStyle = "#e1eadc";
-      ctx.font = "13px system-ui";
-      ctx.fillText("CEL", 30, -12);
+      ctx.font = "12px system-ui";
+      ctx.fillText("CEL", 24, -10);
       ctx.restore();
+    }
+
+    function drawDestroyerAt(ctx2, x, y, heading, scale = 1, showWake = true) {
+      ctx2.save();
+      ctx2.translate(x, y);
+      ctx2.rotate(heading);
+      ctx2.scale(scale, scale);
+      ctx2.lineWidth = 2 / scale;
+      ctx2.strokeStyle = "#101811";
+      ctx2.fillStyle = "#879085";
+
+      ctx2.beginPath();
+      ctx2.moveTo(30, 0);
+      ctx2.lineTo(19, -6);
+      ctx2.lineTo(-26, -7);
+      ctx2.lineTo(-34, -3);
+      ctx2.lineTo(-37, 0);
+      ctx2.lineTo(-34, 3);
+      ctx2.lineTo(-26, 7);
+      ctx2.lineTo(19, 6);
+      ctx2.closePath();
+      ctx2.fill(); ctx2.stroke();
+
+      ctx2.fillStyle = "#b4bbae";
+      ctx2.fillRect(-6, -4, 13, 8);
+      ctx2.fillStyle = "#6f786f";
+      ctx2.fillRect(-19, -3, 8, 6);
+
+      drawTurretInContext(ctx2, 21, 0, guns.bearing - heading, scale);
+      drawTurretInContext(ctx2, 10, 0, guns.bearing - heading, scale);
+      drawTurretInContext(ctx2, -25, 0, guns.bearing - heading, scale);
+
+      if (showWake) {
+        ctx2.strokeStyle = "rgba(225,238,220,.28)";
+        ctx2.lineWidth = 1.2 / scale;
+        ctx2.beginPath();
+        ctx2.moveTo(-36, -2); ctx2.lineTo(-62, -10);
+        ctx2.moveTo(-36, 2); ctx2.lineTo(-62, 10);
+        ctx2.stroke();
+      }
+      ctx2.restore();
+    }
+
+    function drawTurretInContext(ctx2, x, y, localAngle, scale) {
+      ctx2.save();
+      ctx2.translate(x, y);
+      ctx2.rotate(localAngle);
+      ctx2.fillStyle = "#d9ded4";
+      ctx2.strokeStyle = "#111811";
+      ctx2.lineWidth = 1.3 / scale;
+      ctx2.beginPath(); ctx2.arc(0, 0, 3.2, 0, Math.PI * 2); ctx2.fill(); ctx2.stroke();
+      ctx2.beginPath(); ctx2.moveTo(0, 0); ctx2.lineTo(11, 0); ctx2.stroke();
+      ctx2.restore();
     }
 
     function drawDestroyer() {
-      ctx.save();
-      ctx.translate(ship.x, ship.y);
-      ctx.rotate(ship.heading);
-
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "#101811";
-      ctx.fillStyle = "#879085";
-
-      // Mniejszy, uproszczony Fletcher.
-      ctx.beginPath();
-      ctx.moveTo(42, 0);
-      ctx.lineTo(27, -8);
-      ctx.lineTo(-35, -9);
-      ctx.lineTo(-45, -4);
-      ctx.lineTo(-49, 0);
-      ctx.lineTo(-45, 4);
-      ctx.lineTo(-35, 9);
-      ctx.lineTo(27, 8);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-
-      ctx.fillStyle = "#b4bbae";
-      ctx.fillRect(-8, -6, 18, 12);
-      ctx.fillStyle = "#6f786f";
-      ctx.fillRect(-25, -4, 11, 8);
-
-      drawTurretLocal(29, 0, guns.bearing - ship.heading);
-      drawTurretLocal(14, 0, guns.bearing - ship.heading);
-      drawTurretLocal(-34, 0, guns.bearing - ship.heading);
-
-      ctx.strokeStyle = "rgba(225,238,220,.32)";
-      ctx.lineWidth = 1.3;
-      ctx.beginPath();
-      ctx.moveTo(-48, -3); ctx.lineTo(-78, -12);
-      ctx.moveTo(-48, 3); ctx.lineTo(-78, 12);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    function drawTurretLocal(x, y, localAngle) {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(localAngle);
-      ctx.fillStyle = "#d9ded4";
-      ctx.strokeStyle = "#111811";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(15, 0); ctx.stroke();
-      ctx.restore();
+      const p = worldToScreen(ship);
+      drawDestroyerAt(ctx, p.x, p.y, ship.heading, 0.78, true);
     }
 
     function drawEffects() {
       for (const flash of muzzleFlashes) {
         const p = 1 - flash.t / 0.18;
+        const pos = worldToScreen(flash);
         ctx.save();
-        ctx.translate(flash.x, flash.y);
+        ctx.translate(pos.x, pos.y);
         ctx.rotate(flash.angle);
         ctx.fillStyle = `rgba(245,245,220,${p})`;
-        ctx.beginPath();
-        ctx.moveTo(0, 0); ctx.lineTo(28 * p, -8 * p); ctx.lineTo(36 * p, 0); ctx.lineTo(28 * p, 8 * p); ctx.closePath();
-        ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(24 * p, -7 * p); ctx.lineTo(31 * p, 0); ctx.lineTo(24 * p, 7 * p); ctx.closePath(); ctx.fill();
         ctx.restore();
       }
 
       for (const s of shells) {
+        const p = worldToScreen(s);
         ctx.save();
         ctx.fillStyle = "#f4f0d0";
         ctx.strokeStyle = "rgba(255,255,240,.55)";
-        ctx.beginPath();
-        ctx.arc(s.x, s.y - s.z * 0.18, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(s.x - 8, s.y + 5); ctx.lineTo(s.x, s.y - s.z * 0.18); ctx.stroke();
+        ctx.beginPath(); ctx.arc(p.x, p.y - s.z * 0.18, 3.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(p.x - 8, p.y + 5); ctx.lineTo(p.x, p.y - s.z * 0.18); ctx.stroke();
         ctx.restore();
       }
 
       for (const sp of splashes) {
+        const pnt = worldToScreen(sp);
         const p = sp.t / sp.maxT;
         ctx.save();
         ctx.globalAlpha = 1 - p;
         ctx.strokeStyle = sp.hit ? "#f1f1df" : "#d8e8d5";
-        ctx.fillStyle = sp.hit ? "rgba(235,235,210,.18)" : "rgba(220,235,220,.16)";
         ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(sp.x, sp.y, 8 + p * 36, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(pnt.x, pnt.y, 7 + p * 32, 0, Math.PI * 2); ctx.stroke();
         for (let i = 0; i < 10; i++) {
           const a = i * Math.PI * 2 / 10;
           ctx.beginPath();
-          ctx.moveTo(sp.x + Math.cos(a) * 8, sp.y + Math.sin(a) * 8);
-          ctx.lineTo(sp.x + Math.cos(a) * (16 + p * 46), sp.y + Math.sin(a) * (16 + p * 46));
+          ctx.moveTo(pnt.x + Math.cos(a) * 8, pnt.y + Math.sin(a) * 8);
+          ctx.lineTo(pnt.x + Math.cos(a) * (14 + p * 40), pnt.y + Math.sin(a) * (14 + p * 40));
           ctx.stroke();
         }
         ctx.restore();
       }
     }
 
-    function drawScope(scopeCtx, type) {
+    function drawCircularScope(scopeCtx, type) {
       const w = scopeCtx.canvas.width;
       const h = scopeCtx.canvas.height;
+      const size = Math.min(w, h);
       const cx = w / 2;
       const cy = h / 2;
-      const maxR = Math.min(w, h) * 0.42;
+      const maxR = size * 0.43;
       const range = type === "sonar" ? sonar.range : radar.range;
 
       scopeCtx.clearRect(0, 0, w, h);
       scopeCtx.save();
-      scopeCtx.strokeStyle = "rgba(210,230,205,.28)";
+      scopeCtx.beginPath();
+      scopeCtx.arc(cx, cy, maxR + 2, 0, Math.PI * 2);
+      scopeCtx.clip();
+      scopeCtx.fillStyle = "#070b08";
+      scopeCtx.fillRect(0, 0, w, h);
+      scopeCtx.strokeStyle = "rgba(210,230,205,.30)";
       scopeCtx.fillStyle = "#dfe8dc";
       scopeCtx.lineWidth = 1;
+
       for (let r = maxR / 3; r <= maxR; r += maxR / 3) {
         scopeCtx.beginPath(); scopeCtx.arc(cx, cy, r, 0, Math.PI * 2); scopeCtx.stroke();
       }
-      scopeCtx.beginPath(); scopeCtx.moveTo(cx, cy - maxR); scopeCtx.lineTo(cx, cy + maxR); scopeCtx.moveTo(cx - maxR, cy); scopeCtx.lineTo(cx + maxR, cy); scopeCtx.stroke();
+      scopeCtx.beginPath();
+      scopeCtx.moveTo(cx, cy - maxR); scopeCtx.lineTo(cx, cy + maxR);
+      scopeCtx.moveTo(cx - maxR, cy); scopeCtx.lineTo(cx + maxR, cy);
+      scopeCtx.stroke();
       scopeCtx.beginPath(); scopeCtx.arc(cx, cy, 4, 0, Math.PI * 2); scopeCtx.fill();
 
       if (target.alive) {
@@ -563,23 +584,49 @@
           scopeCtx.beginPath(); scopeCtx.arc(px, py, type === "sonar" ? 3 : 5, 0, Math.PI * 2); scopeCtx.fill();
         }
       }
+      scopeCtx.restore();
 
+      scopeCtx.save();
+      scopeCtx.strokeStyle = "#687465";
+      scopeCtx.lineWidth = 2;
+      scopeCtx.beginPath(); scopeCtx.arc(cx, cy, maxR + 2, 0, Math.PI * 2); scopeCtx.stroke();
       scopeCtx.font = "12px Courier New";
       scopeCtx.fillStyle = "#aeb9aa";
       scopeCtx.fillText(`${Math.round(range)} m`, 8, h - 10);
       scopeCtx.restore();
     }
 
+    function drawShipView() {
+      const w = shipViewCanvas.width;
+      const h = shipViewCanvas.height;
+      shipViewCtx.clearRect(0, 0, w, h);
+      shipViewCtx.save();
+      shipViewCtx.fillStyle = "#070b08";
+      shipViewCtx.fillRect(0, 0, w, h);
+      shipViewCtx.strokeStyle = "rgba(210,230,205,.18)";
+      shipViewCtx.beginPath();
+      shipViewCtx.moveTo(w / 2, 0); shipViewCtx.lineTo(w / 2, h);
+      shipViewCtx.moveTo(0, h / 2); shipViewCtx.lineTo(w, h / 2);
+      shipViewCtx.stroke();
+      drawDestroyerAt(shipViewCtx, w / 2, h / 2 + 4, ship.heading, 2.05, false);
+      shipViewCtx.fillStyle = "#aeb9aa";
+      shipViewCtx.font = "12px Courier New";
+      shipViewCtx.fillText(`KURS ${radToCourse(ship.heading).toFixed(0).padStart(3, "0")}°`, 10, h - 12);
+      shipViewCtx.restore();
+    }
+
     function render() {
+      updateCamera();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawGrid();
+      drawWorldGrid();
       drawSensorsAndVectors();
       drawGunnery();
       drawTarget();
       drawEffects();
       drawDestroyer();
-      drawScope(sonarCtx, "sonar");
-      drawScope(radarCtx, "radar");
+      drawCircularScope(sonarCtx, "sonar");
+      drawCircularScope(radarCtx, "radar");
+      drawShipView();
 
       const order = speedOrders[ship.targetSpeedIndex];
       const currentCourse = radToCourse(ship.heading);
@@ -587,6 +634,7 @@
       const ordered = ship.orderedCourse === null ? "---" : Math.round(ship.orderedCourse).toString().padStart(3, "0");
       const aim = getAimPoint();
       const miss = target.alive ? Math.round(Math.hypot(aim.x - target.x, aim.y - target.y)) : "---";
+      const respawn = target.alive ? "---" : `${Math.max(0, targetRespawnTimer || 0).toFixed(1)} s`;
 
       consolePanel.textContent =
 `KONSOLA STEROWANIA OKRETEM / ARTYLERIA
@@ -595,9 +643,9 @@
 ` +
 `MASZYNY: ${order.name.padEnd(13)} | PREDKOSC: ${(ship.speed / 10).toFixed(1).padStart(4)} w. | KURS: ${currentCourse.toFixed(0).padStart(3)}° | ZADANY: ${ordered}°
 ` +
-`STER: ${rudderSide} ${Math.abs(ship.rudder).toFixed(0).padStart(2)}° | ARTYLERIA: ${guns.mode.padEnd(6)} | NAMIERZENIE: ${radToCourse(guns.bearing).toFixed(0).padStart(3)}° | NASTAWA ZASIEGU: ${Math.round(guns.range).toString().padStart(3)} m | BLAD: ${miss} m
+`STER: ${rudderSide} ${Math.abs(ship.rudder).toFixed(0).padStart(2)}° | ARTYLERIA: ${guns.mode.padEnd(6)} | NAMIERZENIE: ${radToCourse(guns.bearing).toFixed(0).padStart(3)}° | ZASIEG: ${Math.round(guns.range).toString().padStart(3)} m | BLAD: ${miss} m
 ` +
-`WPISYWANIE KURSU: ${courseInput || "---"} | STATUS: ${lastMessage}
+`WPISYWANIE KURSU: ${courseInput || "---"} | NOWY CEL ZA: ${respawn} | STATUS: ${lastMessage}
 ` +
 `STEROWANIE: W/S predkosc, A/D ster, 000-359+Enter kurs, X stop | DZIALA: < > obrot, O/L zasięg, F auto, G manual, SPACJA ogien`;
     }
@@ -608,6 +656,7 @@
       updateOrders(dt);
       updatePhysics(dt);
       updateProjectiles(dt);
+      respawnTargetIfNeeded(dt);
       render();
       requestAnimationFrame(loop);
     }
