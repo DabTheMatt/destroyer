@@ -1,5 +1,5 @@
-// U-Booty i Niszczyciele — modularny prototyp
-// Plik celowo podzielony z index.html i style.css, żeby łatwiej wprowadzać zmiany.
+// U-Booty i Niszczyciele — wersja v2
+// Trzy pliki: index.html + style.css + game.js
 
 const game = document.getElementById("game");
 const ctx = game.getContext("2d");
@@ -22,11 +22,16 @@ const windShort = document.getElementById("windShort");
 
 const WORLD_W = 30000;
 const WORLD_H = 30000;
+const KNOT_TO_MS = 0.514444;
+const MS_TO_KNOT = 1 / KNOT_TO_MS;
+
+// Ruch świata jest przyspieszony, żeby przy pełnym widoku radaru było widać przesuwanie siatki i fal.
+// Odczyty na HUD dalej pokazują realne węzły.
+const SIM_SPEED_MULTIPLIER = 14;
 
 let baseMetersPerPixel = 42;
 let METERS_PER_PIXEL = 42;
 let zoom = 1.0;
-
 const MIN_ZOOM = 0.42;
 const MAX_ZOOM = 9.0;
 
@@ -34,12 +39,14 @@ const keysPressed = new Set();
 const keysHandled = new Set();
 
 const speedOrders = [
-  { name: "STOP", value: 0 },
-  { name: "1/3", value: 4.8 },
-  { name: "2/3", value: 8.9 },
-  { name: "CAŁA", value: 13.5 },
-  { name: "FLANKA", value: 18.5 }
+  { name: "STOP", knots: 0 },
+  { name: "1/3", knots: 10 },
+  { name: "2/3", knots: 20 },
+  { name: "CAŁA", knots: 30 },
+  { name: "FLANKA", knots: 37 }
 ];
+
+for (const order of speedOrders) order.value = order.knots * KNOT_TO_MS;
 
 const ship = {
   x: WORLD_W / 2,
@@ -63,12 +70,13 @@ const camera = {
   manualOffsetY: 0
 };
 
+// QC sonar beam: 14° horizontal beam.
 const sonar = {
   on: false,
   minRange: 300,
   range: 2500,
   bearing: degToRad(0),
-  beamWidth: degToRad(32),
+  beamWidth: degToRad(14),
   pingCooldown: 0,
   contactToneCooldown: 0
 };
@@ -92,8 +100,8 @@ const guns = {
 
 const weather = {
   t: 0,
-  rain: 0.30,
-  wave: 0.28,
+  rain: 0.28,
+  wave: 0.26,
   windDir: degToRad(305),
   windSpeed: 14.5
 };
@@ -114,7 +122,7 @@ const wake = [];
 const sonarPulses = [];
 const radarPings = [];
 const radarEchoes = [];
-const rainDrops = Array.from({ length: 160 }, () => ({
+const rainDrops = Array.from({ length: 130 }, () => ({
   x: Math.random(),
   y: Math.random(),
   s: 0.55 + Math.random() * 1.25
@@ -125,17 +133,10 @@ const aircraft = {
   x: -4000,
   y: 4000,
   heading: degToRad(28),
-  speed: 62,
-  altitude: 1800
+  speed: 62
 };
 
-const drag = {
-  active: false,
-  lastX: 0,
-  lastY: 0
-};
-
-// ---------- START ----------
+const drag = { active: false, lastX: 0, lastY: 0 };
 
 resizeAll();
 bindEvents();
@@ -285,68 +286,73 @@ function updateCamera() {
   camera.y = ship.y - game.height * METERS_PER_PIXEL * camera.anchorY + camera.manualOffsetY;
 }
 
-// ---------- AUDIO ----------
+// ---------- AUDIO: ATARI-LIKE ----------
 
 function ensureAudio() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === "suspended") audioCtx.resume();
 }
 
-function tone(freq, duration, type = "sine", volume = 0.08, endFreq = null) {
+function blip(freq = 800, duration = 0.08, volume = 0.12, type = "square") {
   if (!audioCtx) return;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  const filter = audioCtx.createBiquadFilter();
-
   osc.type = type;
   osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-  if (endFreq) {
-    osc.frequency.exponentialRampToValueAtTime(endFreq, audioCtx.currentTime + duration * 0.85);
-  }
-
-  filter.type = "bandpass";
-  filter.frequency.value = 1200;
-  filter.Q.value = 8;
-
+  osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq * 0.62), audioCtx.currentTime + duration);
   gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(volume, audioCtx.currentTime + 0.012);
+  gain.gain.exponentialRampToValueAtTime(volume, audioCtx.currentTime + 0.005);
   gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-
-  osc.connect(filter).connect(gain).connect(audioCtx.destination);
+  osc.connect(gain).connect(audioCtx.destination);
   osc.start();
-  osc.stop(audioCtx.currentTime + duration + 0.03);
+  osc.stop(audioCtx.currentTime + duration + 0.02);
 }
 
-function noise(duration, volume, filterFreq = 280) {
+function burst(duration = 0.25, volume = 0.22, filterFreq = 420) {
   if (!audioCtx) return;
-  const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
+  const buffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * duration), audioCtx.sampleRate);
   const data = buffer.getChannelData(0);
-
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  }
   const src = audioCtx.createBufferSource();
   const gain = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
-
   src.buffer = buffer;
   filter.type = "lowpass";
   filter.frequency.value = filterFreq;
-
   gain.gain.setValueAtTime(volume, audioCtx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-
   src.connect(filter).connect(gain).connect(audioCtx.destination);
   src.start();
-  src.stop(audioCtx.currentTime + duration);
 }
 
 function sonarPing(contact) {
-  tone(1700, 0.24, "sine", 0.16, 850);
-  setTimeout(() => tone(980, 0.10, "sine", 0.06, 720), 250);
-
+  blip(1560, 0.16, 0.18, "square");
+  setTimeout(() => blip(980, 0.10, 0.11, "square"), 180);
   if (contact) {
-    setTimeout(() => tone(620, 0.18, "triangle", 0.14, 520), 430);
-    setTimeout(() => tone(740, 0.13, "triangle", 0.09, 560), 660);
+    setTimeout(() => blip(520, 0.16, 0.18, "triangle"), 390);
+    setTimeout(() => blip(610, 0.13, 0.12, "triangle"), 610);
+  }
+}
+
+function radarContactSound() {
+  blip(1320, 0.06, 0.10, "square");
+  setTimeout(() => blip(1760, 0.04, 0.08, "square"), 70);
+}
+
+function shotSound() {
+  blip(92, 0.20, 0.32, "square");
+  burst(0.28, 0.30, 260);
+  setTimeout(() => blip(55, 0.16, 0.26, "sawtooth"), 30);
+}
+
+function splashSound(hit = false) {
+  if (hit) {
+    burst(0.40, 0.28, 230);
+    blip(120, 0.20, 0.18, "sawtooth");
+  } else {
+    burst(0.32, 0.18, 680);
   }
 }
 
@@ -354,7 +360,7 @@ function toggleSonar() {
   ensureAudio();
   sonar.on = !sonar.on;
   sonar.pingCooldown = 0;
-  lastMessage = sonar.on ? "Sonar aktywny. Ping i nasłuch uruchomione." : "Sonar wyłączony.";
+  lastMessage = sonar.on ? "Sonar aktywny. Wiązka QC: 14°." : "Sonar wyłączony.";
 }
 
 // ---------- GAME STATE ----------
@@ -374,12 +380,8 @@ function randomTarget() {
 }
 
 function updateOrders(dt) {
-  if (wasPressedOnce("arrowup") || wasPressedOnce("w")) {
-    ship.targetSpeedIndex = clamp(ship.targetSpeedIndex + 1, 0, speedOrders.length - 1);
-  }
-  if (wasPressedOnce("arrowdown") || wasPressedOnce("s")) {
-    ship.targetSpeedIndex = clamp(ship.targetSpeedIndex - 1, 0, speedOrders.length - 1);
-  }
+  if (wasPressedOnce("arrowup") || wasPressedOnce("w")) ship.targetSpeedIndex = clamp(ship.targetSpeedIndex + 1, 0, speedOrders.length - 1);
+  if (wasPressedOnce("arrowdown") || wasPressedOnce("s")) ship.targetSpeedIndex = clamp(ship.targetSpeedIndex - 1, 0, speedOrders.length - 1);
 
   if (wasPressedOnce("arrowleft") || wasPressedOnce("a")) {
     ship.rudder = clamp(ship.rudder - 5, -ship.maxRudder, ship.maxRudder);
@@ -443,10 +445,8 @@ function updateOrders(dt) {
 
 function updateAutopilot() {
   if (!ship.autopilot || ship.orderedCourse === null) return;
-
   const diff = angleDiffDeg(ship.orderedCourse, radToCourse(ship.heading));
   ship.rudder = clamp(diff * 0.16, -15, 15);
-
   if (Math.abs(diff) < 1.2) {
     ship.rudder = 0;
     ship.heading = degToRad(ship.orderedCourse);
@@ -458,12 +458,11 @@ function updatePhysics(dt) {
   const previousHeading = ship.heading;
   const targetSpeed = speedOrders[ship.targetSpeedIndex].value;
   const accel = targetSpeed > ship.speed ? 0.55 : 0.82;
-
   ship.speed += clamp(targetSpeed - ship.speed, -accel * dt, accel * dt);
 
   updateAutopilot();
 
-  ship.heading += (ship.rudder / ship.maxRudder) * (ship.speed / 18.5) * 0.105 * dt;
+  ship.heading += (ship.rudder / ship.maxRudder) * (ship.speed / speedOrders[4].value) * 0.105 * dt;
 
   const windAngleToShip = angleDiffRad(weather.windDir, ship.heading);
   const headWind = Math.cos(windAngleToShip) * weather.windSpeed;
@@ -478,9 +477,11 @@ function updatePhysics(dt) {
   if (guns.mode === "MANUAL") guns.bearing += ship.heading - previousHeading;
   guns.relativeBearing = angleDiffRad(guns.bearing, ship.heading);
 
-  const actualSpeed = Math.max(0, ship.speed + windSpeedEffect);
-  ship.x += Math.cos(ship.heading) * actualSpeed * dt + Math.cos(weather.windDir) * leeway * dt;
-  ship.y += Math.sin(ship.heading) * actualSpeed * dt + Math.sin(weather.windDir) * leeway * dt;
+  const actualSpeed = Math.max(0, ship.speed + windSpeedEffect) * SIM_SPEED_MULTIPLIER;
+  const actualLeeway = leeway * SIM_SPEED_MULTIPLIER;
+
+  ship.x += Math.cos(ship.heading) * actualSpeed * dt + Math.cos(weather.windDir) * actualLeeway * dt;
+  ship.y += Math.sin(ship.heading) * actualSpeed * dt + Math.sin(weather.windDir) * actualLeeway * dt;
 
   ship.x = (ship.x + WORLD_W) % WORLD_W;
   ship.y = (ship.y + WORLD_H) % WORLD_H;
@@ -490,30 +491,26 @@ function updatePhysics(dt) {
 
 function addWakeSample() {
   if (ship.speed < 0.5) return;
-
-  const sternX = ship.x - Math.cos(ship.heading) * 65;
-  const sternY = ship.y - Math.sin(ship.heading) * 65;
-
+  const sternX = ship.x - Math.cos(ship.heading) * 68;
+  const sternY = ship.y - Math.sin(ship.heading) * 68;
   wake.push({
     x: sternX,
     y: sternY,
     t: 0,
     heading: ship.heading,
-    intensity: clamp(ship.speed / 18.5, 0.18, 1)
+    intensity: clamp(ship.speed / speedOrders[4].value, 0.18, 1)
   });
-
-  while (wake.length > 420) wake.shift();
+  while (wake.length > 520) wake.shift();
 }
 
 function updateWake(dt) {
   for (const mark of wake) mark.t += dt;
-  while (wake.length && wake[0].t > 55) wake.shift();
+  while (wake.length && wake[0].t > 65) wake.shift();
 }
 
 function updateAircraft(dt) {
-  aircraft.x += Math.cos(aircraft.heading) * aircraft.speed * dt;
-  aircraft.y += Math.sin(aircraft.heading) * aircraft.speed * dt;
-
+  aircraft.x += Math.cos(aircraft.heading) * aircraft.speed * dt * SIM_SPEED_MULTIPLIER;
+  aircraft.y += Math.sin(aircraft.heading) * aircraft.speed * dt * SIM_SPEED_MULTIPLIER;
   if (aircraft.x > WORLD_W + 3000) {
     aircraft.x = -3000;
     aircraft.y = 2000 + Math.random() * (WORLD_H * 0.4);
@@ -523,24 +520,17 @@ function updateAircraft(dt) {
 function updateSonar(dt) {
   sonar.pingCooldown -= dt;
   sonar.contactToneCooldown -= dt;
-
   if (!sonar.on) return;
 
   const contact = target.alive && dist(ship, target) <= sonar.range && dist(ship, target) >= sonar.minRange;
-
   if (sonar.pingCooldown <= 0) {
-    sonarPulses.push({
-      x: ship.x,
-      y: ship.y,
-      angle: sonar.bearing + ship.heading,
-      t: 0
-    });
+    sonarPulses.push({ x: ship.x, y: ship.y, angle: sonar.bearing + ship.heading, t: 0 });
     sonarPing(contact);
     sonar.pingCooldown = 2.4;
   }
 
   if (contact && sonar.contactToneCooldown <= 0) {
-    tone(520, 0.07, "square", 0.04, 480);
+    blip(520, 0.07, 0.10, "square");
     sonar.contactToneCooldown = 0.55;
   }
 }
@@ -549,25 +539,40 @@ function updateRadar(dt) {
   radar.sweepCooldown -= dt;
 
   if (radar.sweepCooldown <= 0) {
-    radarPings.push({ t: 0 });
+    radarPings.push({ x: ship.x, y: ship.y, t: 0, echoPlayed: false });
     radar.sweepCooldown = 3.0;
-
-    if (target.alive && dist(ship, target) <= radar.range) {
-      radarEchoes.push({ x: target.x, y: target.y, t: 0 });
-      ensureAudio();
-      tone(1240, 0.06, "sine", 0.035, 900);
-    }
   }
 
   for (let i = radarPings.length - 1; i >= 0; i--) {
-    radarPings[i].t += dt;
-    if (radarPings[i].t * 1650 > radar.range) radarPings.splice(i, 1);
+    const ping = radarPings[i];
+    ping.t += dt;
+    const radius = ping.t * 2900;
+    const targetDistance = target.alive ? dist(ping, target) : Infinity;
+
+    // Echo pojawia się dokładnie w momencie, kiedy krąg radaru dochodzi do kontaktu.
+    if (!ping.echoPlayed && target.alive && targetDistance <= radar.range && radius >= targetDistance) {
+      ping.echoPlayed = true;
+      radarEchoes.push({ x: target.x, y: target.y, t: 0 });
+      ensureAudio();
+      radarContactSound();
+    }
+
+    if (radius > radar.range) radarPings.splice(i, 1);
   }
 
   for (let i = radarEchoes.length - 1; i >= 0; i--) {
     radarEchoes[i].t += dt;
-    if (radarEchoes[i].t > 1) radarEchoes.splice(i, 1);
+    if (radarEchoes[i].t > 1.1) radarEchoes.splice(i, 1);
   }
+}
+
+function ballisticFlightTime(rangeM) {
+  const v = guns.muzzleVelocity;
+  const g = 9.81;
+  const safeRange = clamp(rangeM, 100, guns.maxRange);
+  const ratio = clamp((safeRange * g) / (v * v), 0.01, 0.95);
+  const angle = Math.asin(ratio) / 2;
+  return (2 * v * Math.sin(angle)) / g;
 }
 
 function updateProjectiles(dt) {
@@ -577,7 +582,6 @@ function updateProjectiles(dt) {
     const shell = shells[i];
     shell.t += dt;
     const p = clamp(shell.t / shell.flightTime, 0, 1);
-
     shell.x = shell.startX + (shell.endX - shell.startX) * p;
     shell.y = shell.startY + (shell.endY - shell.startY) * p;
     shell.z = Math.sin(p * Math.PI) * 260;
@@ -590,14 +594,11 @@ function updateProjectiles(dt) {
         target.alive = false;
         targetRespawnTimer = 10;
         lastMessage = "Trafienie! Nowy cel za 10 sekund.";
-        ensureAudio();
-        noise(0.35, 0.12, 190);
-        tone(85, 0.24, "sawtooth", 0.08, 55);
       } else {
         lastMessage = "Plusk. Pocisk spadł do wody.";
-        ensureAudio();
-        noise(0.28, 0.07, 520);
       }
+      ensureAudio();
+      splashSound(hit);
 
       shells.splice(i, 1);
     }
@@ -616,22 +617,12 @@ function updateProjectiles(dt) {
 
 function respawnTarget(dt) {
   if (target.alive) return;
-
   targetRespawnTimer -= dt;
   if (targetRespawnTimer <= 0) {
     target = randomTarget();
     targetRespawnTimer = null;
     lastMessage = "Nowy cel testowy na mapie.";
   }
-}
-
-function ballisticFlightTime(rangeM) {
-  const v = guns.muzzleVelocity;
-  const g = 9.81;
-  const safeRange = clamp(rangeM, 100, guns.maxRange);
-  const ratio = clamp((safeRange * g) / (v * v), 0.01, 0.95);
-  const angle = Math.asin(ratio) / 2;
-  return (2 * v * Math.sin(angle)) / g;
 }
 
 function getAimPoint() {
@@ -643,8 +634,8 @@ function getAimPoint() {
 
 function getGunMuzzle() {
   return {
-    x: ship.x + Math.cos(ship.heading) * 24,
-    y: ship.y + Math.sin(ship.heading) * 24
+    x: ship.x + Math.cos(ship.heading) * 28,
+    y: ship.y + Math.sin(ship.heading) * 28
   };
 }
 
@@ -659,29 +650,20 @@ function fireGun() {
   const flightTime = ballisticFlightTime(guns.range);
 
   shells.push({
-    startX: start.x,
-    startY: start.y,
-    endX: aim.x,
-    endY: aim.y,
-    x: start.x,
-    y: start.y,
-    z: 0,
-    t: 0,
-    flightTime
+    startX: start.x, startY: start.y,
+    endX: aim.x, endY: aim.y,
+    x: start.x, y: start.y, z: 0, t: 0, flightTime
   });
 
   muzzleFlashes.push({ x: start.x, y: start.y, angle: guns.bearing, t: 0 });
-
   guns.reload = guns.reloadTime;
   lastMessage = `Ogień. Czas lotu: ${flightTime.toFixed(1)} s.`;
 
   ensureAudio();
-  tone(58, 0.22, "sawtooth", 0.32, 34);
-  setTimeout(() => tone(92, 0.11, "square", 0.18, 52), 25);
-  noise(0.34, 0.20, 240);
+  shotSound();
 }
 
-// ---------- DRAW: WORLD ----------
+// ---------- DRAW ----------
 
 function drawMain() {
   resizeAll();
@@ -696,9 +678,10 @@ function drawMain() {
   drawAircraft();
 
   const shipScreen = worldToScreen(ship);
-  // Ten sam model co w prawym oknie. Na mapie jest tylko przeskalowany.
-  drawFletcher(ctx, shipScreen.x, shipScreen.y, ship.heading, 0.15, true);
+  // Ten sam model co w prawym oknie; różni się tylko skalą.
+  drawFletcher(ctx, shipScreen.x, shipScreen.y, ship.heading, 0.18, true);
 
+  drawMapInfoBoxes();
   drawMapHud();
   drawCircularScope(sonarCtx, "sonar");
   drawCircularScope(radarCtx, "radar");
@@ -713,7 +696,6 @@ function drawOcean() {
   grd.addColorStop(0, "#263b36");
   grd.addColorStop(0.55, "#1b2c28");
   grd.addColorStop(1, "#111b18");
-
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, w, h);
 
@@ -729,7 +711,7 @@ function drawWorldGrid() {
   const gridStepM = 1000;
 
   ctx.save();
-  ctx.strokeStyle = "rgba(220,230,215,.18)";
+  ctx.strokeStyle = "rgba(220,230,215,.22)";
   ctx.lineWidth = 1;
 
   const startX = Math.floor(camera.x / gridStepM) * gridStepM;
@@ -761,7 +743,7 @@ function drawWorldWaves() {
   const h = game.height;
 
   ctx.save();
-  ctx.strokeStyle = `rgba(205,220,205,${0.035 + weather.wave * 0.04})`;
+  ctx.strokeStyle = `rgba(205,220,205,${0.045 + weather.wave * 0.045})`;
   ctx.lineWidth = 1;
 
   const waveSpacingM = 550;
@@ -776,20 +758,13 @@ function drawWorldWaves() {
   for (let wy = startY; wy <= endY; wy += waveSpacingM) {
     ctx.beginPath();
     let first = true;
-
     for (let wx = startX; wx <= endX; wx += 110) {
       const sx = (wx - camera.x) / METERS_PER_PIXEL;
       const sy = (wy - camera.y) / METERS_PER_PIXEL;
       const yy = sy + Math.sin(wx / waveLengthM * Math.PI * 2 + wy * 0.0007) * ampPx;
-
-      if (first) {
-        ctx.moveTo(sx, yy);
-        first = false;
-      } else {
-        ctx.lineTo(sx, yy);
-      }
+      if (first) { ctx.moveTo(sx, yy); first = false; }
+      else ctx.lineTo(sx, yy);
     }
-
     ctx.stroke();
   }
 
@@ -801,24 +776,22 @@ function drawWake() {
 
   for (const mark of wake) {
     const p = worldToScreen(mark);
-    const life = clamp(1 - mark.t / 55, 0, 1);
-    const width = (16 + mark.t * 8) / METERS_PER_PIXEL;
-    const length = (80 + mark.t * 22) / METERS_PER_PIXEL;
+    const life = clamp(1 - mark.t / 65, 0, 1);
+    const length = (100 + mark.t * 26) / METERS_PER_PIXEL;
+    const width = (24 + mark.t * 6) / METERS_PER_PIXEL;
 
-    ctx.globalAlpha = 0.55 * life * mark.intensity;
-    ctx.strokeStyle = "rgba(230,240,230,.85)";
-    ctx.fillStyle = "rgba(230,240,230,.045)";
-    ctx.lineWidth = Math.max(1, 4.2 * life);
+    ctx.globalAlpha = 0.72 * life * mark.intensity;
+    ctx.strokeStyle = "rgba(235,245,235,.95)";
+    ctx.fillStyle = "rgba(235,245,235,.060)";
+    ctx.lineWidth = Math.max(1.2, 5.2 * life);
 
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(mark.heading);
-
     ctx.beginPath();
-    ctx.ellipse(-length * 0.18, 0, Math.max(4, length), Math.max(2, width), 0, 0, Math.PI * 2);
+    ctx.ellipse(-length * 0.22, 0, Math.max(4, length), Math.max(2, width), 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-
     ctx.restore();
   }
 
@@ -831,9 +804,8 @@ function drawRain() {
 
   const w = game.width;
   const h = game.height;
-
   ctx.save();
-  ctx.strokeStyle = `rgba(210,225,220,${0.025 + weather.rain * 0.045})`;
+  ctx.strokeStyle = `rgba(210,225,220,${0.020 + weather.rain * 0.035})`;
   ctx.lineWidth = 1;
 
   const slantX = Math.cos(weather.windDir) * 10;
@@ -843,7 +815,6 @@ function drawRain() {
     const r = rainDrops[i];
     const x = ((r.x * w + weather.t * weather.windSpeed * 8 * r.s) % (w + 80)) - 40;
     const y = ((r.y * h + weather.t * 90 * r.s) % (h + 80)) - 40;
-
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x + slantX * r.s, y + slantY * r.s);
@@ -853,14 +824,12 @@ function drawRain() {
   ctx.restore();
 }
 
-// ---------- DRAW: OVERLAYS ----------
-
 function drawTacticalOverlays() {
   drawRangeCircles();
   drawCourseDeviationArc();
 
   if (Math.abs(ship.rudder) > 1 && ship.speed > 1) {
-    const predicted = ship.heading + (ship.rudder / ship.maxRudder) * (ship.speed / 18.5) * 0.42;
+    const predicted = ship.heading + (ship.rudder / ship.maxRudder) * (ship.speed / speedOrders[4].value) * 0.42;
     drawArrowWorld(ship, predicted, 1050, "przewidywany", "rgba(225,235,225,.75)", true);
   }
 
@@ -933,7 +902,6 @@ function drawCourseDeviationArc() {
   const targetAngle = ship.orderedCourse !== null
     ? degToRad(ship.orderedCourse)
     : ship.heading + (ship.rudder / ship.maxRudder) * 0.72;
-
   const diff = angleDiffRad(targetAngle, base);
   if (Math.abs(diff) < 0.02) return;
 
@@ -945,24 +913,13 @@ function drawCourseDeviationArc() {
   ctx.strokeStyle = "rgba(225,235,225,.88)";
   ctx.fillStyle = "rgba(225,235,225,.92)";
   ctx.lineWidth = 2;
-
   ctx.beginPath();
   ctx.arc(0, 0, radius, base, end, diff < 0);
   ctx.stroke();
 
-  const arrowA = end;
-  ctx.beginPath();
-  ctx.moveTo(Math.cos(arrowA) * radius, Math.sin(arrowA) * radius);
-  ctx.lineTo(Math.cos(arrowA - Math.sign(diff) * 0.15) * (radius - 10), Math.sin(arrowA - Math.sign(diff) * 0.15) * (radius - 10));
-  ctx.lineTo(Math.cos(arrowA + Math.sign(diff) * 0.15) * (radius - 10), Math.sin(arrowA + Math.sign(diff) * 0.15) * (radius - 10));
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.font = "14px system-ui";
-  const deg = Math.abs(diff * 180 / Math.PI).toFixed(0);
   const mid = base + diff / 2;
-  ctx.fillText(`${deg}°`, Math.cos(mid) * (radius + 16), Math.sin(mid) * (radius + 16));
-
+  ctx.font = "14px system-ui";
+  ctx.fillText(`${Math.abs(diff * 180 / Math.PI).toFixed(0)}°`, Math.cos(mid) * (radius + 16), Math.sin(mid) * (radius + 16));
   ctx.restore();
 }
 
@@ -975,7 +932,6 @@ function drawGunneryOverlay() {
   ctx.strokeStyle = "rgba(217,170,42,.85)";
   ctx.lineWidth = 1.8;
   ctx.setLineDash([7, 7]);
-
   ctx.beginPath();
   ctx.moveTo(ss.x, ss.y);
   ctx.lineTo(aa.x, aa.y);
@@ -985,14 +941,12 @@ function drawGunneryOverlay() {
   ctx.beginPath();
   ctx.arc(aa.x, aa.y, 13, 0, Math.PI * 2);
   ctx.stroke();
-
   ctx.beginPath();
   ctx.moveTo(aa.x - 20, aa.y);
   ctx.lineTo(aa.x + 20, aa.y);
   ctx.moveTo(aa.x, aa.y - 20);
   ctx.lineTo(aa.x, aa.y + 20);
   ctx.stroke();
-
   ctx.restore();
 }
 
@@ -1008,7 +962,6 @@ function drawSensorEffects() {
     }
 
     const sp = worldToScreen(pulse);
-
     ctx.save();
     ctx.translate(sp.x, sp.y);
     ctx.strokeStyle = `rgba(111,226,93,${1 - radius / sonar.range})`;
@@ -1020,11 +973,11 @@ function drawSensorEffects() {
   }
 
   for (const ping of radarPings) {
-    const radius = ping.t * 1650;
-    const sp = worldToScreen(ship);
+    const radius = ping.t * 2900;
+    const sp = worldToScreen(ping);
 
     ctx.save();
-    ctx.strokeStyle = `rgba(74,182,255,${0.22 - radius / radar.range * 0.2})`;
+    ctx.strokeStyle = `rgba(74,182,255,${0.24 - radius / radar.range * 0.22})`;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(sp.x, sp.y, radius / METERS_PER_PIXEL, 0, Math.PI * 2);
@@ -1034,18 +987,15 @@ function drawSensorEffects() {
 
   for (const echo of radarEchoes) {
     const sp = worldToScreen(echo);
-
     ctx.save();
-    ctx.strokeStyle = `rgba(74,182,255,${1 - echo.t})`;
-    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = `rgba(74,182,255,${1 - echo.t / 1.1})`;
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
-    ctx.arc(sp.x, sp.y, 8 + echo.t * 30, 0, Math.PI * 2);
+    ctx.arc(sp.x, sp.y, 8 + echo.t * 34, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
 }
-
-// ---------- DRAW: OBJECTS ----------
 
 function drawTarget() {
   if (!target.alive) return;
@@ -1057,7 +1007,6 @@ function drawTarget() {
   ctx.translate(p.x, p.y);
   ctx.rotate(target.heading);
   ctx.scale(scale, scale);
-
   ctx.fillStyle = "#aeb8aa";
   ctx.strokeStyle = "#0b100d";
   ctx.lineWidth = METERS_PER_PIXEL * 1.2;
@@ -1074,7 +1023,6 @@ function drawTarget() {
 
   ctx.fillStyle = "#d9e3d3";
   ctx.fillRect(-20, -4, 28, 8);
-
   ctx.restore();
 }
 
@@ -1087,23 +1035,14 @@ function drawAircraft() {
   ctx.scale(0.7, 0.7);
   ctx.strokeStyle = "rgba(230,230,230,.75)";
   ctx.lineWidth = 1.5;
-
-  // Fw 200 Condor — uproszczona sylwetka.
   ctx.beginPath();
-  ctx.moveTo(18, 0);
-  ctx.lineTo(-16, 0);
-  ctx.moveTo(0, -2);
-  ctx.lineTo(0, 2);
-  ctx.moveTo(-3, 0);
-  ctx.lineTo(-12, -12);
-  ctx.moveTo(-3, 0);
-  ctx.lineTo(-12, 12);
-  ctx.moveTo(8, 0);
-  ctx.lineTo(18, -18);
-  ctx.moveTo(8, 0);
-  ctx.lineTo(18, 18);
+  ctx.moveTo(18, 0); ctx.lineTo(-16, 0);
+  ctx.moveTo(0, -2); ctx.lineTo(0, 2);
+  ctx.moveTo(-3, 0); ctx.lineTo(-12, -12);
+  ctx.moveTo(-3, 0); ctx.lineTo(-12, 12);
+  ctx.moveTo(8, 0); ctx.lineTo(18, -18);
+  ctx.moveTo(8, 0); ctx.lineTo(18, 18);
   ctx.stroke();
-
   ctx.restore();
 }
 
@@ -1113,12 +1052,9 @@ function drawFletcher(context, x, y, heading, scale = 1, wakeOn = true) {
   context.rotate(heading);
   context.scale(scale, scale);
 
-  // Ważne: model rysujemy w lokalnych jednostkach, a nie przez skalowanie canvasu
-  // zależne od METERS_PER_PIXEL. Dzięki temu wygląda identycznie na mapie i w oknie.
   context.lineWidth = 1.4 / Math.max(scale, 0.1);
   context.strokeStyle = "#0b100d";
 
-  // Kadłub Fletchera: długi, wąski, ostry dziób, płaska rufa.
   context.fillStyle = "#858f84";
   context.beginPath();
   context.moveTo(58, 0);
@@ -1135,11 +1071,9 @@ function drawFletcher(context, x, y, heading, scale = 1, wakeOn = true) {
   context.fill();
   context.stroke();
 
-  // Pokład.
   context.fillStyle = "#aab3a7";
   context.fillRect(-42, -4.8, 82, 9.6);
 
-  // Nadbudówki, kominy, mostek.
   context.fillStyle = "#c0c7bd";
   context.fillRect(11, -6.5, 19, 13);
   context.fillStyle = "#a3ada1";
@@ -1148,7 +1082,6 @@ function drawFletcher(context, x, y, heading, scale = 1, wakeOn = true) {
   context.fillRect(-28, -4.5, 9, 9);
   context.fillRect(-38, -4.2, 7, 8.4);
 
-  // Maszt.
   context.strokeStyle = "#d9e3d3";
   context.lineWidth = 1 / Math.max(scale, 0.1);
   context.beginPath();
@@ -1160,14 +1093,12 @@ function drawFletcher(context, x, y, heading, scale = 1, wakeOn = true) {
   context.lineTo(31, -18);
   context.stroke();
 
-  // Pięć stanowisk dział.
   drawTurret(context, 46, 0, guns.bearing - heading, scale);
   drawTurret(context, 30, 0, guns.bearing - heading, scale);
   drawTurret(context, -18, 0, guns.bearing - heading, scale);
   drawTurret(context, -39, 0, guns.bearing - heading, scale);
   drawTurret(context, -55, 0, guns.bearing - heading, scale);
 
-  // Wyrzutnie torped.
   context.strokeStyle = "#202820";
   context.lineWidth = 1.1 / Math.max(scale, 0.1);
   for (let i = -2; i <= 2; i++) {
@@ -1181,10 +1112,8 @@ function drawFletcher(context, x, y, heading, scale = 1, wakeOn = true) {
     context.strokeStyle = "rgba(220,230,215,.32)";
     context.lineWidth = 1 / Math.max(scale, 0.1);
     context.beginPath();
-    context.moveTo(-68, -3);
-    context.lineTo(-100, -14);
-    context.moveTo(-68, 3);
-    context.lineTo(-100, 14);
+    context.moveTo(-68, -3); context.lineTo(-100, -14);
+    context.moveTo(-68, 3); context.lineTo(-100, 14);
     context.stroke();
   }
 
@@ -1195,21 +1124,17 @@ function drawTurret(context, x, y, angle, scale) {
   context.save();
   context.translate(x, y);
   context.rotate(angle);
-
   context.fillStyle = "#d7ddd1";
   context.strokeStyle = "#0b100d";
   context.lineWidth = 1 / Math.max(scale, 0.1);
-
   context.beginPath();
   context.arc(0, 0, 3.2, 0, Math.PI * 2);
   context.fill();
   context.stroke();
-
   context.beginPath();
   context.moveTo(0, 0);
   context.lineTo(12, 0);
   context.stroke();
-
   context.restore();
 }
 
@@ -1217,12 +1142,10 @@ function drawEffects() {
   for (const flash of muzzleFlashes) {
     const p = 1 - flash.t / 0.18;
     const pos = worldToScreen(flash);
-
     ctx.save();
     ctx.translate(pos.x, pos.y);
     ctx.rotate(flash.angle);
     ctx.fillStyle = `rgba(245,230,165,${p})`;
-
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.lineTo(20 * p, -6 * p);
@@ -1230,13 +1153,11 @@ function drawEffects() {
     ctx.lineTo(20 * p, 6 * p);
     ctx.closePath();
     ctx.fill();
-
     ctx.restore();
   }
 
   for (const shell of shells) {
     const p = worldToScreen(shell);
-
     ctx.save();
     ctx.fillStyle = "#f5e6a5";
     ctx.beginPath();
@@ -1248,7 +1169,6 @@ function drawEffects() {
   for (const splash of splashes) {
     const pp = worldToScreen(splash);
     const t = splash.t / splash.maxT;
-
     ctx.save();
     ctx.globalAlpha = 1 - t;
     ctx.strokeStyle = splash.hit ? "#f3e8bd" : "#d8e8d5";
@@ -1260,7 +1180,7 @@ function drawEffects() {
   }
 }
 
-// ---------- DRAW: PANELS ----------
+// ---------- PANELS & HUD ----------
 
 function drawCircularScope(context, type) {
   const w = context.canvas.width;
@@ -1274,7 +1194,6 @@ function drawCircularScope(context, type) {
 
   context.clearRect(0, 0, w, h);
   context.save();
-
   context.fillStyle = "#050806";
   context.fillRect(0, 0, w, h);
 
@@ -1290,10 +1209,8 @@ function drawCircularScope(context, type) {
 
   context.globalAlpha = 0.75;
   context.beginPath();
-  context.moveTo(cx - r, cy);
-  context.lineTo(cx + r, cy);
-  context.moveTo(cx, cy - r);
-  context.lineTo(cx, cy + r);
+  context.moveTo(cx - r, cy); context.lineTo(cx + r, cy);
+  context.moveTo(cx, cy - r); context.lineTo(cx, cy + r);
   context.stroke();
 
   context.globalAlpha = 1;
@@ -1310,7 +1227,6 @@ function drawCircularScope(context, type) {
     const dx = target.x - ship.x;
     const dy = target.y - ship.y;
     const d = Math.hypot(dx, dy);
-
     if (d <= range && (type !== "sonar" || d >= sonar.minRange)) {
       context.fillStyle = type === "sonar" ? "#6fe25d" : "#4ab6ff";
       context.beginPath();
@@ -1322,7 +1238,6 @@ function drawCircularScope(context, type) {
   context.fillStyle = type === "sonar" ? "#6fe25d" : "#4ab6ff";
   context.font = "12px Courier New";
   context.fillText(`${range} m`, 8, h - 10);
-
   context.restore();
 }
 
@@ -1336,13 +1251,10 @@ function drawShipPanel() {
 
   shipCtx.strokeStyle = "rgba(217,227,211,.16)";
   shipCtx.beginPath();
-  shipCtx.moveTo(w / 2, 0);
-  shipCtx.lineTo(w / 2, h);
-  shipCtx.moveTo(0, h / 2);
-  shipCtx.lineTo(w, h / 2);
+  shipCtx.moveTo(w / 2, 0); shipCtx.lineTo(w / 2, h);
+  shipCtx.moveTo(0, h / 2); shipCtx.lineTo(w, h / 2);
   shipCtx.stroke();
 
-  // Ten sam rysunek co na mapie. Skala tylko większa.
   const previewScale = Math.min(w, h) / 210;
   drawFletcher(shipCtx, w / 2, h / 2 - 2, ship.heading, previewScale, false);
 
@@ -1355,29 +1267,64 @@ function drawMapHud() {
   const order = speedOrders[ship.targetSpeedIndex];
   const course = radToCourse(ship.heading).toFixed(0).padStart(3, "0");
   const rudderSide = ship.rudder < -0.5 ? "L" : ship.rudder > 0.5 ? "P" : "ZERO";
-  const text = `PRĘDKOŚĆ ${order.name} / ${ship.speed.toFixed(1)} m/s   STER ${Math.abs(ship.rudder).toFixed(0)}° ${rudderSide}   KURS ${course}°`;
+  const text = `PRĘDKOŚĆ ${order.name} / ${(ship.speed * MS_TO_KNOT).toFixed(1)} w.   STER ${Math.abs(ship.rudder).toFixed(0)}° ${rudderSide}   KURS ${course}°`;
 
   ctx.save();
-  ctx.font = "bold 15px Courier New";
-
+  ctx.font = "bold 18px Courier New";
   const metrics = ctx.measureText(text);
-  const padX = 14;
+  const padX = 16;
   const boxW = metrics.width + padX * 2;
-  const boxH = 32;
+  const boxH = 38;
   const x = (game.width - boxW) / 2;
   const y = game.height - boxH - 14;
 
-  ctx.fillStyle = "rgba(5,8,6,.72)";
-  ctx.strokeStyle = "rgba(217,227,211,.45)";
+  ctx.fillStyle = "rgba(5,8,6,.76)";
+  ctx.strokeStyle = "rgba(217,227,211,.48)";
   ctx.lineWidth = 1;
-
   roundedRect(ctx, x, y, boxW, boxH, 8);
   ctx.fill();
   ctx.stroke();
 
   ctx.fillStyle = "#d9e3d3";
-  ctx.fillText(text, x + padX, y + 21);
+  ctx.fillText(text, x + padX, y + 25);
+  ctx.restore();
+}
 
+function drawMapInfoBoxes() {
+  drawInfoBox(14, 12, [
+    `POZYCJA`,
+    `X ${Math.round(ship.x)} m`,
+    `Y ${Math.round(ship.y)} m`,
+    `SEKTOR ${Math.floor(ship.x / 1000)}-${Math.floor(ship.y / 1000)}`
+  ]);
+
+  const weatherName = weather.rain > 0.5 ? "DESZCZ" : weather.rain > 0.18 ? "MŻAWKA" : "SUCHO";
+  const lines = [
+    `POGODA ${weatherName}`,
+    `WIATR ${radToCourse(weather.windDir).toFixed(0)}°`,
+    `${weather.windSpeed.toFixed(1)} m/s`,
+    `FALA ${weather.wave.toFixed(2)}`
+  ];
+
+  const boxW = 170;
+  drawInfoBox(game.width - boxW - 14, 12, lines, boxW);
+}
+
+function drawInfoBox(x, y, lines, width = 170) {
+  ctx.save();
+  ctx.font = "14px Courier New";
+  const h = 22 + lines.length * 18;
+  ctx.fillStyle = "rgba(5,8,6,.72)";
+  ctx.strokeStyle = "rgba(217,227,211,.42)";
+  ctx.lineWidth = 1;
+  roundedRect(ctx, x, y, width, h, 8);
+  ctx.fill();
+  ctx.stroke();
+
+  lines.forEach((line, i) => {
+    ctx.fillStyle = i === 0 ? "#d9e3d3" : "#95a18f";
+    ctx.fillText(line, x + 10, y + 20 + i * 18);
+  });
   ctx.restore();
 }
 
@@ -1422,9 +1369,9 @@ function updateUI() {
     `CZAS LOTU: <span style="color:var(--guns)">${flightTime.toFixed(1)} s</span>`;
 
   consolePanel.textContent =
-    `TRYB WPISYWANIA: ${inputMode === "AIM" ? "KĄT CELOWANIA" : "KURS OKRĘTU"}  |  WPIS: ${inputMode === "AIM" ? (angleInput || "---") : (courseInput || "---")}  |  SONAR ${sonar.on ? "WŁ." : "WYŁ."}  |  RADAR ${radar.range} m  |  DZIAŁA ${guns.minRange}-${guns.maxRange} m\n` +
-    `BŁĄD CEL.: ${miss} m  |  NOWY CEL: ${respawn}  |  ZOOM: ${zoom.toFixed(2)}x  |  SKALA: 1px=${METERS_PER_PIXEL.toFixed(1)}m  |  ${lastMessage}\n` +
-    `Mysz: kółko=zoom, LPM=przesuń mapę, 2x klik=centruj. W/S prędkość, A/D ster, Z zero, G przełącza wpis KURS/KĄT, F auto, < > obrót, O/L zasięg, [ ] sonar, Spacja strzał`;
+    `TRYB WPISYWANIA: ${inputMode === "AIM" ? "KĄT CELOWANIA" : "KURS OKRĘTU"}  |  WPIS: ${inputMode === "AIM" ? (angleInput || "---") : (courseInput || "---")}  |  SONAR ${sonar.on ? "WŁ." : "WYŁ."}  |  WIĄZKA QC 14°  |  RADAR ${radar.range} m  |  DZIAŁA ${guns.minRange}-${guns.maxRange} m\n` +
+    `PRĘDKOŚĆ: ${(ship.speed * MS_TO_KNOT).toFixed(1)} w.  |  BŁĄD CEL.: ${miss} m  |  NOWY CEL: ${respawn}  |  ZOOM: ${zoom.toFixed(2)}x  |  SKALA: 1px=${METERS_PER_PIXEL.toFixed(1)}m  |  ${lastMessage}\n` +
+    `Mysz: kółko=zoom, LPM=przesuń mapę, 2x klik=centruj. W/S prędkość, A/D ster, Z zero, G wpis KURS/KĄT, F auto, < > obrót, O/L zasięg, [ ] sonar, Spacja strzał`;
 }
 
 // ---------- LOOP ----------
@@ -1448,4 +1395,9 @@ function loop(now) {
   updateUI();
 
   requestAnimationFrame(loop);
+}
+
+function updateWake(dt) {
+  for (const mark of wake) mark.t += dt;
+  while (wake.length && wake[0].t > 65) wake.shift();
 }
