@@ -3,96 +3,137 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>U-Booty i Niszczyciele — ASCII</title>
+  <title>U-Booty i Niszczyciele — prototyp graficzny</title>
   <style>
-    :root {
-      --bg: #000;
-      --fg: #f2f2f2;
-      --muted: #a8a8a8;
-    }
-
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      background: var(--bg);
-      color: var(--fg);
-      font-family: "Courier New", Courier, monospace;
+      background: #06111d;
+      color: #e8f4ff;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       height: 100vh;
       overflow: hidden;
       display: flex;
       flex-direction: column;
+      align-items: center;
     }
 
-    #screen {
-      flex: 1;
-      white-space: pre;
-      line-height: 1;
-      font-size: 15px;
-      padding: 8px 10px;
-      overflow: hidden;
-      user-select: none;
+    header {
+      width: min(720px, 100%);
+      padding: 10px 12px 6px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .hint {
+      margin-top: 4px;
+      color: #a9c8dc;
+      font-size: 13px;
+    }
+
+    canvas {
+      width: min(720px, 96vw);
+      height: min(720px, calc(100vh - 178px));
+      background: radial-gradient(circle at 50% 45%, #174465 0%, #092034 72%);
+      border: 2px solid #2d6d91;
+      border-radius: 12px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.45);
     }
 
     #console {
-      border-top: 1px solid var(--fg);
+      width: min(720px, 96vw);
+      min-height: 118px;
+      margin: 8px 0 10px;
+      border: 1px solid rgba(170, 220, 255, 0.22);
+      background: rgba(0,0,0,.28);
+      border-radius: 10px;
       padding: 10px 12px;
-      min-height: 138px;
+      font-family: "Courier New", Courier, monospace;
       white-space: pre-wrap;
-      font-size: 15px;
       line-height: 1.25;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
-  <pre id="screen"></pre>
+  <header>
+    <h1>U-Booty i Niszczyciele — niszczyciel inspirowany klasą Fletcher</h1>
+    <div class="hint">Sterowanie: W/S prędkość, A/D ster, Spacja ster zero, X stop, cyfry + Enter = zadany kurs, np. 248.</div>
+  </header>
+
+  <canvas id="game" width="720" height="720"></canvas>
   <div id="console"></div>
 
   <script>
-    const screen = document.getElementById("screen");
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
     const consolePanel = document.getElementById("console");
-
-    // Bardziej wertykalna mapa: mniej kolumn, więcej wierszy.
-    const COLS = 58;
-    const ROWS = 42;
 
     const keysPressed = new Set();
     const keysHandled = new Set();
 
     const speedOrders = [
       { name: "STOP", value: 0 },
-      { name: "1/3 NAPRZOD", value: 2.5 },
-      { name: "2/3 NAPRZOD", value: 5.0 },
-      { name: "CALA NAPRZOD", value: 7.5 },
-      { name: "FLANKA", value: 10.0 }
+      { name: "1/3 NAPRZOD", value: 28 },
+      { name: "2/3 NAPRZOD", value: 55 },
+      { name: "CALA NAPRZOD", value: 82 },
+      { name: "FLANKA", value: 108 }
     ];
 
     const ship = {
-      x: 29,
-      y: 34,
-      heading: -Math.PI / 2,
+      x: 360,
+      y: 560,
+      heading: degToRad(0),
       speed: 0,
       targetSpeedIndex: 0,
       rudder: 0,
       maxRudder: 30,
-      acceleration: 1.2
+      acceleration: 16,
+      orderedCourse: null,
+      autopilot: false
     };
 
     const uboat = {
-      x: 30,
-      y: 8,
+      x: 380,
+      y: 155,
       detected: false
     };
 
-    const sonar = { range: 12 };
-
+    const sonar = { range: 145 };
+    let courseInput = "";
     let lastTime = performance.now();
 
     window.addEventListener("keydown", (event) => {
       const key = event.key.toLowerCase();
       keysPressed.add(key);
+
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) {
         event.preventDefault();
+      }
+
+      if (/^[0-9]$/.test(event.key)) {
+        courseInput = (courseInput + event.key).slice(-3);
+      }
+
+      if (event.key === "Enter" && courseInput.length > 0) {
+        const course = Number(courseInput);
+        if (Number.isFinite(course)) {
+          ship.orderedCourse = ((course % 360) + 360) % 360;
+          ship.autopilot = true;
+          ship.rudder = 0;
+        }
+        courseInput = "";
+      }
+
+      if (event.key === "Escape") {
+        courseInput = "";
+        ship.autopilot = false;
+        ship.orderedCourse = null;
       }
     });
 
@@ -110,152 +151,273 @@
       return false;
     }
 
+    function degToRad(deg) {
+      // Kurs marynarski: 0 = północ, 90 = wschód.
+      return (deg - 90) * Math.PI / 180;
+    }
+
+    function radToCourse(rad) {
+      return (((rad * 180 / Math.PI) + 90) % 360 + 360) % 360;
+    }
+
     function clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
+    }
+
+    function angleDiffDeg(target, current) {
+      return ((target - current + 540) % 360) - 180;
     }
 
     function distance(a, b) {
       return Math.hypot(a.x - b.x, a.y - b.y);
     }
 
-    function angleToGlyph(angle) {
-      const normalized = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-      const sector = Math.round(normalized / (Math.PI / 4)) % 8;
-      return [">", "\\", "v", "/", "<", "\\", "^", "/"][sector];
-    }
-
-    function put(grid, x, y, char) {
-      const ix = Math.round(x);
-      const iy = Math.round(y);
-      if (ix >= 0 && ix < COLS && iy >= 0 && iy < ROWS) grid[iy][ix] = char;
-    }
-
-    function drawText(grid, x, y, text) {
-      for (let i = 0; i < text.length; i++) put(grid, x + i, y, text[i]);
-    }
-
     function updateOrders() {
       if (wasPressedOnce("arrowup") || wasPressedOnce("w")) {
         ship.targetSpeedIndex = clamp(ship.targetSpeedIndex + 1, 0, speedOrders.length - 1);
       }
-
       if (wasPressedOnce("arrowdown") || wasPressedOnce("s")) {
         ship.targetSpeedIndex = clamp(ship.targetSpeedIndex - 1, 0, speedOrders.length - 1);
       }
 
-      if (wasPressedOnce("arrowleft") || wasPressedOnce("a")) {
-        ship.rudder = clamp(ship.rudder - 5, -ship.maxRudder, ship.maxRudder);
+      const manualRudder = wasPressedOnce("arrowleft") || wasPressedOnce("a") || wasPressedOnce("arrowright") || wasPressedOnce("d") || wasPressedOnce(" ");
+
+      if (manualRudder) {
+        ship.autopilot = false;
+        ship.orderedCourse = null;
       }
 
-      if (wasPressedOnce("arrowright") || wasPressedOnce("d")) {
-        ship.rudder = clamp(ship.rudder + 5, -ship.maxRudder, ship.maxRudder);
-      }
+      if (keysHandled.has("arrowleft") || keysHandled.has("a")) ship.rudder = clamp(ship.rudder - 5, -ship.maxRudder, ship.maxRudder);
+      if (keysHandled.has("arrowright") || keysHandled.has("d")) ship.rudder = clamp(ship.rudder + 5, -ship.maxRudder, ship.maxRudder);
+      if (keysHandled.has(" ")) ship.rudder = 0;
 
-      if (wasPressedOnce(" ")) ship.rudder = 0;
       if (wasPressedOnce("x")) ship.targetSpeedIndex = 0;
+    }
+
+    function updateAutopilot() {
+      if (!ship.autopilot || ship.orderedCourse === null) return;
+
+      const currentCourse = radToCourse(ship.heading);
+      const diff = angleDiffDeg(ship.orderedCourse, currentCourse);
+
+      // Prosty sternik: mocniej wychyla ster przy dużej różnicy, delikatniej przy zbliżaniu do kursu.
+      ship.rudder = clamp(diff * 0.75, -ship.maxRudder, ship.maxRudder);
+
+      if (Math.abs(diff) < 1.4) {
+        ship.rudder = 0;
+        ship.heading = degToRad(ship.orderedCourse);
+        ship.autopilot = false;
+      }
     }
 
     function updatePhysics(dt) {
       const targetSpeed = speedOrders[ship.targetSpeedIndex].value;
+      if (ship.speed < targetSpeed) ship.speed = Math.min(targetSpeed, ship.speed + ship.acceleration * dt);
+      if (ship.speed > targetSpeed) ship.speed = Math.max(targetSpeed, ship.speed - ship.acceleration * dt);
 
-      if (ship.speed < targetSpeed) {
-        ship.speed = Math.min(targetSpeed, ship.speed + ship.acceleration * dt);
-      } else if (ship.speed > targetSpeed) {
-        ship.speed = Math.max(targetSpeed, ship.speed - ship.acceleration * dt);
-      }
+      updateAutopilot();
 
-      // Stały ster daje stały skręt. Im większa prędkość i wychylenie, tym ciaśniejszy zwrot.
-      const speedFactor = ship.speed / 10;
+      const speedFactor = ship.speed / speedOrders[speedOrders.length - 1].value;
       const rudderFactor = ship.rudder / ship.maxRudder;
-      const turnRate = rudderFactor * speedFactor * 0.9;
+      const turnRate = rudderFactor * speedFactor * 1.05;
       ship.heading += turnRate * dt;
 
-      // Znakowa mapa jest wyższa niż szersza, więc ruch Y ma inną skalę.
-      ship.x += Math.cos(ship.heading) * ship.speed * dt * 1.55;
-      ship.y += Math.sin(ship.heading) * ship.speed * dt * 0.78;
+      ship.x += Math.cos(ship.heading) * ship.speed * dt;
+      ship.y += Math.sin(ship.heading) * ship.speed * dt;
 
-      // Zawijanie mapy na krawędziach, jak na dużym stole taktycznym.
-      if (ship.x < 2) ship.x = COLS - 3;
-      if (ship.x > COLS - 3) ship.x = 2;
-      if (ship.y < 2) ship.y = ROWS - 3;
-      if (ship.y > ROWS - 3) ship.y = 2;
+      // Zawijanie na krawędziach mapy.
+      if (ship.x < -30) ship.x = canvas.width + 30;
+      if (ship.x > canvas.width + 30) ship.x = -30;
+      if (ship.y < -30) ship.y = canvas.height + 30;
+      if (ship.y > canvas.height + 30) ship.y = -30;
 
       uboat.detected = distance(ship, uboat) <= sonar.range;
     }
 
-    function render() {
-      const grid = Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => " "));
-
-      for (let x = 0; x < COLS; x++) {
-        put(grid, x, 0, "-");
-        put(grid, x, ROWS - 1, "-");
+    function drawGrid() {
+      ctx.save();
+      ctx.strokeStyle = "rgba(210,240,255,.09)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= canvas.width; x += 60) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
       }
-      for (let y = 0; y < ROWS; y++) {
-        put(grid, 0, y, "|");
-        put(grid, COLS - 1, y, "|");
+      for (let y = 0; y <= canvas.height; y += 60) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       }
-      put(grid, 0, 0, "+"); put(grid, COLS - 1, 0, "+");
-      put(grid, 0, ROWS - 1, "+"); put(grid, COLS - 1, ROWS - 1, "+");
+      ctx.restore();
+    }
 
-      for (let x = 6; x < COLS - 6; x += 10) {
-        for (let y = 5; y < ROWS - 4; y += 6) put(grid, x, y, ".");
-      }
+    function drawArrow(x, y, angle, length, label, dashed = false) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.strokeStyle = "#ffffff";
+      ctx.fillStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      if (dashed) ctx.setLineDash([8, 7]);
 
-      drawText(grid, 3, 1, "ATLANTYK / EKRAN TAKTYCZNY ASCII");
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(length, 0);
+      ctx.stroke();
 
-      const sx = Math.round(ship.x);
-      const sy = Math.round(ship.y);
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(length, 0);
+      ctx.lineTo(length - 13, -6);
+      ctx.lineTo(length - 13, 6);
+      ctx.closePath();
+      ctx.fill();
 
-      // Wektor kierunku przed okrętem.
-      const vx1 = ship.x + Math.cos(ship.heading) * 2;
-      const vy1 = ship.y + Math.sin(ship.heading) * 1;
-      const vx2 = ship.x + Math.cos(ship.heading) * 4;
-      const vy2 = ship.y + Math.sin(ship.heading) * 2;
-      const vx3 = ship.x + Math.cos(ship.heading) * 6;
-      const vy3 = ship.y + Math.sin(ship.heading) * 3;
+      ctx.rotate(-angle);
+      ctx.font = "13px system-ui";
+      ctx.fillText(label, Math.cos(angle) * (length + 8), Math.sin(angle) * (length + 8));
+      ctx.restore();
+    }
 
-      put(grid, vx1, vy1, ".");
-      put(grid, vx2, vy2, ".");
-      put(grid, vx3, vy3, angleToGlyph(ship.heading));
+    function drawPredictedTurnVector() {
+      if (Math.abs(ship.rudder) < 1 || ship.speed < 3) return;
 
-      put(grid, sx, sy, angleToGlyph(ship.heading));
-      drawText(grid, sx + 2, sy, "DD");
+      const speedFactor = ship.speed / speedOrders[speedOrders.length - 1].value;
+      const rudderFactor = ship.rudder / ship.maxRudder;
+      const predictedAngle = ship.heading + rudderFactor * speedFactor * 0.95;
+      drawArrow(ship.x, ship.y, predictedAngle, 105, "przewidywany", true);
+    }
+
+    function drawOrderedCourseVector() {
+      if (ship.orderedCourse === null) return;
+      drawArrow(ship.x, ship.y, degToRad(ship.orderedCourse), 135, `kurs ${Math.round(ship.orderedCourse).toString().padStart(3, "0")}`, true);
+    }
+
+    function drawSonar() {
+      ctx.save();
+      ctx.strokeStyle = uboat.detected ? "rgba(120,255,180,.62)" : "rgba(190,230,255,.20)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(ship.x, ship.y, sonar.range, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawFletcherInspiredDestroyer() {
+      ctx.save();
+      ctx.translate(ship.x, ship.y);
+      ctx.rotate(ship.heading);
+
+      // Sylwetka inspirowana niszczycielem klasy Fletcher, uproszczona do czytelności.
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#07131f";
+      ctx.fillStyle = "#d8e3ea";
+
+      ctx.beginPath();
+      ctx.moveTo(66, 0);       // dziób
+      ctx.lineTo(42, -13);
+      ctx.lineTo(-48, -15);
+      ctx.lineTo(-64, -8);
+      ctx.lineTo(-70, 0);      // rufa
+      ctx.lineTo(-64, 8);
+      ctx.lineTo(-48, 15);
+      ctx.lineTo(42, 13);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Pokład i nadbudówki.
+      ctx.fillStyle = "#8094a2";
+      ctx.fillRect(-12, -10, 28, 20);
+      ctx.fillStyle = "#a8bac7";
+      ctx.fillRect(18, -7, 18, 14);
+      ctx.fillStyle = "#6c7f8c";
+      ctx.fillRect(-38, -6, 15, 12);
+
+      // Wieże dział — uproszczone.
+      ctx.fillStyle = "#f4f7f9";
+      drawTurret(46, 0, 18);
+      drawTurret(26, 0, 16);
+      drawTurret(-50, 0, -16);
+
+      // Komin / maszt.
+      ctx.fillStyle = "#4d5d68";
+      ctx.fillRect(-2, -4, 8, 8);
+      ctx.strokeStyle = "#f2f2f2";
+      ctx.beginPath();
+      ctx.moveTo(4, -4);
+      ctx.lineTo(4, -26);
+      ctx.stroke();
+
+      // Kilwater.
+      ctx.strokeStyle = "rgba(255,255,255,.35)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-68, -5); ctx.lineTo(-110, -18);
+      ctx.moveTo(-68, 5); ctx.lineTo(-110, 18);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawTurret(x, y, barrelLength) {
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + barrelLength, y);
+      ctx.stroke();
+    }
+
+    function drawUboat() {
+      ctx.save();
+      ctx.translate(uboat.x, uboat.y);
+      ctx.globalAlpha = uboat.detected ? 1 : 0.2;
+      ctx.fillStyle = uboat.detected ? "#7cffae" : "#9db2c1";
+      ctx.strokeStyle = "#06111d";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 34, 10, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.fillRect(-4, -18, 8, 12);
+      ctx.restore();
 
       if (uboat.detected) {
-        put(grid, uboat.x, uboat.y, "U");
-        drawText(grid, uboat.x + 2, uboat.y, "KONTAKT");
-      } else {
-        put(grid, uboat.x, uboat.y, ".");
+        ctx.save();
+        ctx.fillStyle = "#7cffae";
+        ctx.font = "15px system-ui";
+        ctx.fillText("U-Boot wykryty", uboat.x + 36, uboat.y - 18);
+        ctx.restore();
       }
+    }
 
-      const d = distance(ship, uboat);
-      drawText(grid, 3, ROWS - 2, `${uboat.detected ? "SONAR: KONTAKT" : "SONAR: CISZA"} / DYSTANS ${Math.round(d)} hm`);
-
-      screen.textContent = grid.map(row => row.join("")).join("\n");
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawGrid();
+      drawSonar();
+      drawOrderedCourseVector();
+      drawPredictedTurnVector();
+      drawArrow(ship.x, ship.y, ship.heading, 120, "aktualny");
+      drawUboat();
+      drawFletcherInspiredDestroyer();
 
       const order = speedOrders[ship.targetSpeedIndex];
-      const headingDeg = (((ship.heading * 180 / Math.PI) % 360) + 360) % 360;
-      const rudderSide = ship.rudder < 0 ? "LEWO " : ship.rudder > 0 ? "PRAWO" : "ZERO ";
-      const rudderAbs = Math.abs(ship.rudder).toFixed(0).padStart(2);
+      const currentCourse = radToCourse(ship.heading);
+      const rudderSide = ship.rudder < -0.5 ? "LEWO " : ship.rudder > 0.5 ? "PRAWO" : "ZERO ";
+      const ordered = ship.orderedCourse === null ? "---" : Math.round(ship.orderedCourse).toString().padStart(3, "0");
 
       consolePanel.textContent =
 `KONSOLA STEROWANIA OKRETEM
 ` +
 `------------------------------------------------------------
 ` +
-`ROZKAZ MASZYN: ${order.name.padEnd(13)} | AKTUALNA PREDKOSC: ${ship.speed.toFixed(1).padStart(4)} w.
+`ROZKAZ MASZYN: ${order.name.padEnd(13)} | AKTUALNA PREDKOSC: ${(ship.speed / 10).toFixed(1).padStart(4)} w. | KURS: ${currentCourse.toFixed(0).padStart(3)}°
 ` +
-`STER: ${rudderSide} ${rudderAbs}°            | KURS: ${headingDeg.toFixed(0).padStart(3)}°
+`STER: ${rudderSide} ${Math.abs(ship.rudder).toFixed(0).padStart(2)}°              | ZADANY KURS: ${ordered}° | ${ship.autopilot ? "ZMIANA KURSU" : "STER RECZNY"}
 ` +
-`SONAR: ${uboat.detected ? "KONTAKT ZANURZONY" : "BRAK KONTAKTU"}      | ZASIEG: ${sonar.range} hm
+`SONAR: ${uboat.detected ? "KONTAKT ZANURZONY" : "BRAK KONTAKTU"}         | ZASIEG: ${Math.round(sonar.range)} m
 ` +
-`STEROWANIE: W/↑ = zwieksz rozkaz predkosci | S/↓ = zmniejsz rozkaz predkosci
+`WPISYWANIE KURSU: ${courseInput || "---"}
 ` +
-`            A/← = ster 5° w lewo          | D/→ = ster 5° w prawo
-` +
-`            SPACJA = ster zero            | X = STOP
-` +
-`TEST: ustaw 1/3 NAPRZOD i STER PRAWO 10°. Okret powinien stale zataczac luk/kolo.`;
+`STEROWANIE: W/S = predkosc | A/D = ster +/-5° | SPACJA = ster zero | X = stop | 000-359 + Enter = kurs`;
     }
 
     function loop(now) {
