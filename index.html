@@ -3,75 +3,126 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>U-Booty i Niszczyciele — prototyp graficzny</title>
+  <title>U-Booty i Niszczyciele — prototyp artylerii</title>
   <style>
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      background: #06111d;
-      color: #e8f4ff;
+      background: #111713;
+      color: #dfe8dc;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       height: 100vh;
       overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      display: grid;
+      grid-template-columns: 1fr 260px;
+      grid-template-rows: auto 1fr auto;
+      gap: 8px;
+      padding: 8px;
     }
 
     header {
-      width: min(720px, 100%);
-      padding: 10px 12px 6px;
+      grid-column: 1 / 3;
+      min-height: 34px;
     }
 
     h1 {
       margin: 0;
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
+      color: #e7eee2;
     }
 
     .hint {
-      margin-top: 4px;
-      color: #a9c8dc;
-      font-size: 13px;
+      margin-top: 2px;
+      color: #aeb9aa;
+      font-size: 12px;
     }
 
-    canvas {
-      width: min(720px, 96vw);
-      height: min(720px, calc(100vh - 178px));
-      background: radial-gradient(circle at 50% 45%, #174465 0%, #092034 72%);
-      border: 2px solid #2d6d91;
+    #game {
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at 50% 45%, #58645c 0%, #344138 58%, #222c26 100%);
+      border: 2px solid #6f7b6b;
       border-radius: 12px;
-      box-shadow: 0 18px 50px rgba(0,0,0,.45);
+      box-shadow: 0 18px 50px rgba(0,0,0,.42);
+    }
+
+    aside {
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .scopeBox {
+      background: #0d130f;
+      border: 1px solid #687465;
+      border-radius: 12px;
+      padding: 8px;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .scopeBox strong {
+      font-family: "Courier New", Courier, monospace;
+      color: #dfe8dc;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .scopeBox canvas {
+      width: 100%;
+      height: 100%;
+      background: #070b08;
+      border: 1px solid #3f4a3d;
+      border-radius: 8px;
     }
 
     #console {
-      width: min(720px, 96vw);
-      min-height: 118px;
-      margin: 8px 0 10px;
-      border: 1px solid rgba(170, 220, 255, 0.22);
-      background: rgba(0,0,0,.28);
+      grid-column: 1 / 3;
+      min-height: 126px;
+      border: 1px solid rgba(215, 230, 210, 0.24);
+      background: rgba(0,0,0,.30);
       border-radius: 10px;
       padding: 10px 12px;
       font-family: "Courier New", Courier, monospace;
       white-space: pre-wrap;
-      line-height: 1.25;
-      font-size: 14px;
+      line-height: 1.22;
+      font-size: 13px;
+      color: #e1eadc;
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>U-Booty i Niszczyciele — niszczyciel inspirowany klasą Fletcher</h1>
-    <div class="hint">Sterowanie: W/S prędkość, A/D ster, Spacja ster zero, X stop, cyfry + Enter = zadany kurs, np. 248.</div>
+    <h1>U-Booty i Niszczyciele — Fletcher / artyleria testowa</h1>
+    <div class="hint">W/S prędkość, A/D ster, cyfry + Enter kurs. Działa: &lt;/&gt; obrót, O/L zasięg, F auto, G manual, Spacja ogień.</div>
   </header>
 
-  <canvas id="game" width="720" height="720"></canvas>
+  <canvas id="game" width="1040" height="760"></canvas>
+
+  <aside>
+    <div class="scopeBox">
+      <strong>SONAR</strong>
+      <canvas id="sonar" width="230" height="260"></canvas>
+    </div>
+    <div class="scopeBox">
+      <strong>RADAR</strong>
+      <canvas id="radar" width="230" height="260"></canvas>
+    </div>
+  </aside>
+
   <div id="console"></div>
 
   <script>
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
+    const sonarCanvas = document.getElementById("sonar");
+    const sonarCtx = sonarCanvas.getContext("2d");
+    const radarCanvas = document.getElementById("radar");
+    const radarCtx = radarCanvas.getContext("2d");
     const consolePanel = document.getElementById("console");
 
     const keysPressed = new Set();
@@ -86,8 +137,8 @@
     ];
 
     const ship = {
-      x: 360,
-      y: 560,
+      x: 520,
+      y: 590,
       heading: degToRad(0),
       speed: 0,
       targetSpeedIndex: 0,
@@ -98,27 +149,35 @@
       autopilot: false
     };
 
-    const uboat = {
-      x: 380,
-      y: 155,
-      detected: false
+    const guns = {
+      mode: "AUTO",
+      bearing: degToRad(0),
+      range: 330,
+      minRange: 120,
+      maxRange: 620,
+      reload: 0,
+      reloadTime: 0.9
     };
 
-    const sonar = { range: 145 };
+    const target = randomTarget();
+    const sonar = { range: 230 };
+    const radar = { range: 620 };
+    const shells = [];
+    const splashes = [];
+    const muzzleFlashes = [];
+
     let courseInput = "";
     let lastTime = performance.now();
+    let lastMessage = "Cel testowy rozstawiony losowo.";
 
     window.addEventListener("keydown", (event) => {
       const key = event.key.toLowerCase();
       keysPressed.add(key);
 
-      if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) {
-        event.preventDefault();
-      }
+      if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault();
+      if (event.key === " ") event.preventDefault();
 
-      if (/^[0-9]$/.test(event.key)) {
-        courseInput = (courseInput + event.key).slice(-3);
-      }
+      if (/^[0-9]$/.test(event.key)) courseInput = (courseInput + event.key).slice(-3);
 
       if (event.key === "Enter" && courseInput.length > 0) {
         const course = Number(courseInput);
@@ -143,6 +202,16 @@
       keysHandled.delete(key);
     });
 
+    function randomTarget() {
+      return {
+        x: 140 + Math.random() * 760,
+        y: 90 + Math.random() * 360,
+        radius: 18,
+        alive: true,
+        name: "CEL TESTOWY"
+      };
+    }
+
     function wasPressedOnce(key) {
       if (keysPressed.has(key) && !keysHandled.has(key)) {
         keysHandled.add(key);
@@ -151,58 +220,50 @@
       return false;
     }
 
-    function degToRad(deg) {
-      // Kurs marynarski: 0 = północ, 90 = wschód.
-      return (deg - 90) * Math.PI / 180;
-    }
+    function degToRad(deg) { return (deg - 90) * Math.PI / 180; }
+    function radToCourse(rad) { return (((rad * 180 / Math.PI) + 90) % 360 + 360) % 360; }
+    function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+    function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+    function angleDiffRad(target, current) { return Math.atan2(Math.sin(target - current), Math.cos(target - current)); }
+    function angleDiffDeg(target, current) { return ((target - current + 540) % 360) - 180; }
+    function angleToPoint(from, to) { return Math.atan2(to.y - from.y, to.x - from.x); }
 
-    function radToCourse(rad) {
-      return (((rad * 180 / Math.PI) + 90) % 360 + 360) % 360;
-    }
+    function updateOrders(dt) {
+      if (wasPressedOnce("arrowup") || wasPressedOnce("w")) ship.targetSpeedIndex = clamp(ship.targetSpeedIndex + 1, 0, speedOrders.length - 1);
+      if (wasPressedOnce("arrowdown") || wasPressedOnce("s")) ship.targetSpeedIndex = clamp(ship.targetSpeedIndex - 1, 0, speedOrders.length - 1);
 
-    function clamp(value, min, max) {
-      return Math.max(min, Math.min(max, value));
-    }
-
-    function angleDiffDeg(target, current) {
-      return ((target - current + 540) % 360) - 180;
-    }
-
-    function distance(a, b) {
-      return Math.hypot(a.x - b.x, a.y - b.y);
-    }
-
-    function updateOrders() {
-      if (wasPressedOnce("arrowup") || wasPressedOnce("w")) {
-        ship.targetSpeedIndex = clamp(ship.targetSpeedIndex + 1, 0, speedOrders.length - 1);
-      }
-      if (wasPressedOnce("arrowdown") || wasPressedOnce("s")) {
-        ship.targetSpeedIndex = clamp(ship.targetSpeedIndex - 1, 0, speedOrders.length - 1);
-      }
-
-      const manualRudder = wasPressedOnce("arrowleft") || wasPressedOnce("a") || wasPressedOnce("arrowright") || wasPressedOnce("d") || wasPressedOnce(" ");
-
-      if (manualRudder) {
-        ship.autopilot = false;
-        ship.orderedCourse = null;
-      }
+      const manualRudder = wasPressedOnce("arrowleft") || wasPressedOnce("a") || wasPressedOnce("arrowright") || wasPressedOnce("d");
+      if (manualRudder) { ship.autopilot = false; ship.orderedCourse = null; }
 
       if (keysHandled.has("arrowleft") || keysHandled.has("a")) ship.rudder = clamp(ship.rudder - 5, -ship.maxRudder, ship.maxRudder);
       if (keysHandled.has("arrowright") || keysHandled.has("d")) ship.rudder = clamp(ship.rudder + 5, -ship.maxRudder, ship.maxRudder);
-      if (keysHandled.has(" ")) ship.rudder = 0;
-
       if (wasPressedOnce("x")) ship.targetSpeedIndex = 0;
+
+      if (wasPressedOnce("f")) { guns.mode = "AUTO"; lastMessage = "Artyleria: tryb automatyczny."; }
+      if (wasPressedOnce("g")) { guns.mode = "MANUAL"; lastMessage = "Artyleria: tryb manualny."; }
+
+      if (wasPressedOnce(" ")) {
+        if (courseInput.length === 0) fireGun();
+      }
+
+      if (wasPressedOnce(",") || wasPressedOnce("<")) guns.bearing -= 0.08;
+      if (wasPressedOnce(".") || wasPressedOnce(">")) guns.bearing += 0.08;
+      if (wasPressedOnce("o")) guns.range = clamp(guns.range + 25, guns.minRange, guns.maxRange);
+      if (wasPressedOnce("l")) guns.range = clamp(guns.range - 25, guns.minRange, guns.maxRange);
+
+      if (guns.mode === "AUTO" && target.alive) {
+        const desired = angleToPoint(ship, target);
+        const diff = angleDiffRad(desired, guns.bearing);
+        guns.bearing += clamp(diff, -1.6 * dt, 1.6 * dt);
+        guns.range += clamp(distance(ship, target) - guns.range, -120 * dt, 120 * dt);
+      }
     }
 
     function updateAutopilot() {
       if (!ship.autopilot || ship.orderedCourse === null) return;
-
       const currentCourse = radToCourse(ship.heading);
       const diff = angleDiffDeg(ship.orderedCourse, currentCourse);
-
-      // Prosty sternik: mocniej wychyla ster przy dużej różnicy, delikatniej przy zbliżaniu do kursu.
       ship.rudder = clamp(diff * 0.75, -ship.maxRudder, ship.maxRudder);
-
       if (Math.abs(diff) < 1.4) {
         ship.rudder = 0;
         ship.heading = degToRad(ship.orderedCourse);
@@ -216,34 +277,94 @@
       if (ship.speed > targetSpeed) ship.speed = Math.max(targetSpeed, ship.speed - ship.acceleration * dt);
 
       updateAutopilot();
-
       const speedFactor = ship.speed / speedOrders[speedOrders.length - 1].value;
       const rudderFactor = ship.rudder / ship.maxRudder;
-      const turnRate = rudderFactor * speedFactor * 1.05;
-      ship.heading += turnRate * dt;
-
+      ship.heading += rudderFactor * speedFactor * 1.05 * dt;
       ship.x += Math.cos(ship.heading) * ship.speed * dt;
       ship.y += Math.sin(ship.heading) * ship.speed * dt;
 
-      // Zawijanie na krawędziach mapy.
       if (ship.x < -30) ship.x = canvas.width + 30;
       if (ship.x > canvas.width + 30) ship.x = -30;
       if (ship.y < -30) ship.y = canvas.height + 30;
       if (ship.y > canvas.height + 30) ship.y = -30;
+    }
 
-      uboat.detected = distance(ship, uboat) <= sonar.range;
+    function updateProjectiles(dt) {
+      guns.reload = Math.max(0, guns.reload - dt);
+
+      for (let i = shells.length - 1; i >= 0; i--) {
+        const s = shells[i];
+        s.t += dt;
+        const p = clamp(s.t / s.flightTime, 0, 1);
+        s.x = s.startX + (s.endX - s.startX) * p;
+        s.y = s.startY + (s.endY - s.startY) * p;
+        s.z = Math.sin(p * Math.PI) * 55;
+
+        if (p >= 1) {
+          const hitDistance = target.alive ? Math.hypot(s.endX - target.x, s.endY - target.y) : Infinity;
+          if (hitDistance < target.radius + 18) {
+            target.alive = false;
+            lastMessage = "Trafienie! Cel testowy zniszczony.";
+            splashes.push({ x: s.endX, y: s.endY, t: 0, maxT: 1.2, hit: true });
+          } else {
+            lastMessage = "Upadek pocisku w wodę.";
+            splashes.push({ x: s.endX, y: s.endY, t: 0, maxT: 1.0, hit: false });
+          }
+          shells.splice(i, 1);
+        }
+      }
+
+      for (let i = splashes.length - 1; i >= 0; i--) {
+        splashes[i].t += dt;
+        if (splashes[i].t > splashes[i].maxT) splashes.splice(i, 1);
+      }
+
+      for (let i = muzzleFlashes.length - 1; i >= 0; i--) {
+        muzzleFlashes[i].t += dt;
+        if (muzzleFlashes[i].t > 0.18) muzzleFlashes.splice(i, 1);
+      }
+    }
+
+    function fireGun() {
+      if (guns.reload > 0) { lastMessage = "Działa przeładowują."; return; }
+      const aim = getAimPoint();
+      const start = getForwardGunPosition();
+      shells.push({
+        startX: start.x,
+        startY: start.y,
+        endX: aim.x,
+        endY: aim.y,
+        x: start.x,
+        y: start.y,
+        z: 0,
+        t: 0,
+        flightTime: 0.75 + guns.range / 900
+      });
+      muzzleFlashes.push({ x: start.x, y: start.y, angle: guns.bearing, t: 0 });
+      guns.reload = guns.reloadTime;
+      lastMessage = "Ogień!";
+    }
+
+    function getAimPoint() {
+      return {
+        x: ship.x + Math.cos(guns.bearing) * guns.range,
+        y: ship.y + Math.sin(guns.bearing) * guns.range
+      };
+    }
+
+    function getForwardGunPosition() {
+      return {
+        x: ship.x + Math.cos(ship.heading) * 30,
+        y: ship.y + Math.sin(ship.heading) * 30
+      };
     }
 
     function drawGrid() {
       ctx.save();
-      ctx.strokeStyle = "rgba(210,240,255,.09)";
+      ctx.strokeStyle = "rgba(225,238,220,.08)";
       ctx.lineWidth = 1;
-      for (let x = 0; x <= canvas.width; x += 60) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-      }
-      for (let y = 0; y <= canvas.height; y += 60) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-      }
+      for (let x = 0; x <= canvas.width; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+      for (let y = 0; y <= canvas.height; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
       ctx.restore();
     }
 
@@ -251,180 +372,242 @@
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(angle);
-      ctx.strokeStyle = "#ffffff";
-      ctx.fillStyle = "#ffffff";
+      ctx.strokeStyle = "#dfe8dc";
+      ctx.fillStyle = "#dfe8dc";
       ctx.lineWidth = 2;
       if (dashed) ctx.setLineDash([8, 7]);
-
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(length, 0);
-      ctx.stroke();
-
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(length, 0); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.moveTo(length, 0);
-      ctx.lineTo(length - 13, -6);
-      ctx.lineTo(length - 13, 6);
-      ctx.closePath();
-      ctx.fill();
-
+      ctx.beginPath(); ctx.moveTo(length, 0); ctx.lineTo(length - 12, -5); ctx.lineTo(length - 12, 5); ctx.closePath(); ctx.fill();
       ctx.rotate(-angle);
-      ctx.font = "13px system-ui";
+      ctx.font = "12px system-ui";
       ctx.fillText(label, Math.cos(angle) * (length + 8), Math.sin(angle) * (length + 8));
       ctx.restore();
     }
 
-    function drawPredictedTurnVector() {
-      if (Math.abs(ship.rudder) < 1 || ship.speed < 3) return;
-
-      const speedFactor = ship.speed / speedOrders[speedOrders.length - 1].value;
-      const rudderFactor = ship.rudder / ship.maxRudder;
-      const predictedAngle = ship.heading + rudderFactor * speedFactor * 0.95;
-      drawArrow(ship.x, ship.y, predictedAngle, 105, "przewidywany", true);
-    }
-
-    function drawOrderedCourseVector() {
-      if (ship.orderedCourse === null) return;
-      drawArrow(ship.x, ship.y, degToRad(ship.orderedCourse), 135, `kurs ${Math.round(ship.orderedCourse).toString().padStart(3, "0")}`, true);
-    }
-
-    function drawSonar() {
+    function drawSensorsAndVectors() {
       ctx.save();
-      ctx.strokeStyle = uboat.detected ? "rgba(120,255,180,.62)" : "rgba(190,230,255,.20)";
+      ctx.strokeStyle = "rgba(210,230,205,.16)";
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(ship.x, ship.y, sonar.range, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(ship.x, ship.y, sonar.range, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = "rgba(210,230,205,.08)";
+      ctx.beginPath(); ctx.arc(ship.x, ship.y, radar.range, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+
+      if (Math.abs(ship.rudder) > 1 && ship.speed > 3) {
+        const predicted = ship.heading + (ship.rudder / ship.maxRudder) * (ship.speed / 108) * 0.95;
+        drawArrow(ship.x, ship.y, predicted, 95, "przewidywany", true);
+      }
+      if (ship.orderedCourse !== null) drawArrow(ship.x, ship.y, degToRad(ship.orderedCourse), 120, `kurs ${Math.round(ship.orderedCourse).toString().padStart(3, "0")}`, true);
+      drawArrow(ship.x, ship.y, ship.heading, 95, "kurs");
+    }
+
+    function drawGunnery() {
+      const aim = getAimPoint();
+      ctx.save();
+      ctx.strokeStyle = "rgba(245,245,230,.55)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 8]);
+      ctx.beginPath(); ctx.moveTo(ship.x, ship.y); ctx.lineTo(aim.x, aim.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = "#f1f1df";
+      ctx.beginPath(); ctx.arc(aim.x, aim.y, 16, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(aim.x - 24, aim.y); ctx.lineTo(aim.x + 24, aim.y); ctx.moveTo(aim.x, aim.y - 24); ctx.lineTo(aim.x, aim.y + 24); ctx.stroke();
+      ctx.fillStyle = "#f1f1df";
+      ctx.font = "13px system-ui";
+      ctx.fillText("punkt trafienia", aim.x + 20, aim.y - 12);
       ctx.restore();
     }
 
-    function drawFletcherInspiredDestroyer() {
+    function drawTarget() {
+      if (!target.alive) return;
+      ctx.save();
+      ctx.translate(target.x, target.y);
+      ctx.fillStyle = "#b7beb0";
+      ctx.strokeStyle = "#151c16";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 24, 13, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#879080";
+      ctx.fillRect(-8, -9, 16, 18);
+      ctx.fillStyle = "#e1eadc";
+      ctx.font = "13px system-ui";
+      ctx.fillText("CEL", 30, -12);
+      ctx.restore();
+    }
+
+    function drawDestroyer() {
       ctx.save();
       ctx.translate(ship.x, ship.y);
       ctx.rotate(ship.heading);
 
-      // Sylwetka inspirowana niszczycielem klasy Fletcher, uproszczona do czytelności.
       ctx.lineWidth = 2;
-      ctx.strokeStyle = "#07131f";
-      ctx.fillStyle = "#d8e3ea";
+      ctx.strokeStyle = "#101811";
+      ctx.fillStyle = "#879085";
 
+      // Mniejszy, uproszczony Fletcher.
       ctx.beginPath();
-      ctx.moveTo(66, 0);       // dziób
-      ctx.lineTo(42, -13);
-      ctx.lineTo(-48, -15);
-      ctx.lineTo(-64, -8);
-      ctx.lineTo(-70, 0);      // rufa
-      ctx.lineTo(-64, 8);
-      ctx.lineTo(-48, 15);
-      ctx.lineTo(42, 13);
+      ctx.moveTo(42, 0);
+      ctx.lineTo(27, -8);
+      ctx.lineTo(-35, -9);
+      ctx.lineTo(-45, -4);
+      ctx.lineTo(-49, 0);
+      ctx.lineTo(-45, 4);
+      ctx.lineTo(-35, 9);
+      ctx.lineTo(27, 8);
       ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // Pokład i nadbudówki.
-      ctx.fillStyle = "#8094a2";
-      ctx.fillRect(-12, -10, 28, 20);
-      ctx.fillStyle = "#a8bac7";
-      ctx.fillRect(18, -7, 18, 14);
-      ctx.fillStyle = "#6c7f8c";
-      ctx.fillRect(-38, -6, 15, 12);
-
-      // Wieże dział — uproszczone.
-      ctx.fillStyle = "#f4f7f9";
-      drawTurret(46, 0, 18);
-      drawTurret(26, 0, 16);
-      drawTurret(-50, 0, -16);
-
-      // Komin / maszt.
-      ctx.fillStyle = "#4d5d68";
-      ctx.fillRect(-2, -4, 8, 8);
-      ctx.strokeStyle = "#f2f2f2";
-      ctx.beginPath();
-      ctx.moveTo(4, -4);
-      ctx.lineTo(4, -26);
-      ctx.stroke();
-
-      // Kilwater.
-      ctx.strokeStyle = "rgba(255,255,255,.35)";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(-68, -5); ctx.lineTo(-110, -18);
-      ctx.moveTo(-68, 5); ctx.lineTo(-110, 18);
-      ctx.stroke();
-
-      ctx.restore();
-    }
-
-    function drawTurret(x, y, barrelLength) {
-      ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + barrelLength, y);
-      ctx.stroke();
-    }
-
-    function drawUboat() {
-      ctx.save();
-      ctx.translate(uboat.x, uboat.y);
-      ctx.globalAlpha = uboat.detected ? 1 : 0.2;
-      ctx.fillStyle = uboat.detected ? "#7cffae" : "#9db2c1";
-      ctx.strokeStyle = "#06111d";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 34, 10, 0, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
-      ctx.fillRect(-4, -18, 8, 12);
-      ctx.restore();
 
-      if (uboat.detected) {
+      ctx.fillStyle = "#b4bbae";
+      ctx.fillRect(-8, -6, 18, 12);
+      ctx.fillStyle = "#6f786f";
+      ctx.fillRect(-25, -4, 11, 8);
+
+      drawTurretLocal(29, 0, guns.bearing - ship.heading);
+      drawTurretLocal(14, 0, guns.bearing - ship.heading);
+      drawTurretLocal(-34, 0, guns.bearing - ship.heading);
+
+      ctx.strokeStyle = "rgba(225,238,220,.32)";
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(-48, -3); ctx.lineTo(-78, -12);
+      ctx.moveTo(-48, 3); ctx.lineTo(-78, 12);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawTurretLocal(x, y, localAngle) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(localAngle);
+      ctx.fillStyle = "#d9ded4";
+      ctx.strokeStyle = "#111811";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(15, 0); ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawEffects() {
+      for (const flash of muzzleFlashes) {
+        const p = 1 - flash.t / 0.18;
         ctx.save();
-        ctx.fillStyle = "#7cffae";
-        ctx.font = "15px system-ui";
-        ctx.fillText("U-Boot wykryty", uboat.x + 36, uboat.y - 18);
+        ctx.translate(flash.x, flash.y);
+        ctx.rotate(flash.angle);
+        ctx.fillStyle = `rgba(245,245,220,${p})`;
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(28 * p, -8 * p); ctx.lineTo(36 * p, 0); ctx.lineTo(28 * p, 8 * p); ctx.closePath();
+        ctx.fill();
         ctx.restore();
       }
+
+      for (const s of shells) {
+        ctx.save();
+        ctx.fillStyle = "#f4f0d0";
+        ctx.strokeStyle = "rgba(255,255,240,.55)";
+        ctx.beginPath();
+        ctx.arc(s.x, s.y - s.z * 0.18, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(s.x - 8, s.y + 5); ctx.lineTo(s.x, s.y - s.z * 0.18); ctx.stroke();
+        ctx.restore();
+      }
+
+      for (const sp of splashes) {
+        const p = sp.t / sp.maxT;
+        ctx.save();
+        ctx.globalAlpha = 1 - p;
+        ctx.strokeStyle = sp.hit ? "#f1f1df" : "#d8e8d5";
+        ctx.fillStyle = sp.hit ? "rgba(235,235,210,.18)" : "rgba(220,235,220,.16)";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(sp.x, sp.y, 8 + p * 36, 0, Math.PI * 2); ctx.stroke();
+        for (let i = 0; i < 10; i++) {
+          const a = i * Math.PI * 2 / 10;
+          ctx.beginPath();
+          ctx.moveTo(sp.x + Math.cos(a) * 8, sp.y + Math.sin(a) * 8);
+          ctx.lineTo(sp.x + Math.cos(a) * (16 + p * 46), sp.y + Math.sin(a) * (16 + p * 46));
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    function drawScope(scopeCtx, type) {
+      const w = scopeCtx.canvas.width;
+      const h = scopeCtx.canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const maxR = Math.min(w, h) * 0.42;
+      const range = type === "sonar" ? sonar.range : radar.range;
+
+      scopeCtx.clearRect(0, 0, w, h);
+      scopeCtx.save();
+      scopeCtx.strokeStyle = "rgba(210,230,205,.28)";
+      scopeCtx.fillStyle = "#dfe8dc";
+      scopeCtx.lineWidth = 1;
+      for (let r = maxR / 3; r <= maxR; r += maxR / 3) {
+        scopeCtx.beginPath(); scopeCtx.arc(cx, cy, r, 0, Math.PI * 2); scopeCtx.stroke();
+      }
+      scopeCtx.beginPath(); scopeCtx.moveTo(cx, cy - maxR); scopeCtx.lineTo(cx, cy + maxR); scopeCtx.moveTo(cx - maxR, cy); scopeCtx.lineTo(cx + maxR, cy); scopeCtx.stroke();
+      scopeCtx.beginPath(); scopeCtx.arc(cx, cy, 4, 0, Math.PI * 2); scopeCtx.fill();
+
+      if (target.alive) {
+        const dx = target.x - ship.x;
+        const dy = target.y - ship.y;
+        const d = Math.hypot(dx, dy);
+        if (d <= range) {
+          const px = cx + dx / range * maxR;
+          const py = cy + dy / range * maxR;
+          scopeCtx.fillStyle = type === "sonar" ? "#96c89a" : "#dfe8dc";
+          scopeCtx.beginPath(); scopeCtx.arc(px, py, type === "sonar" ? 3 : 5, 0, Math.PI * 2); scopeCtx.fill();
+        }
+      }
+
+      scopeCtx.font = "12px Courier New";
+      scopeCtx.fillStyle = "#aeb9aa";
+      scopeCtx.fillText(`${Math.round(range)} m`, 8, h - 10);
+      scopeCtx.restore();
     }
 
     function render() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawGrid();
-      drawSonar();
-      drawOrderedCourseVector();
-      drawPredictedTurnVector();
-      drawArrow(ship.x, ship.y, ship.heading, 120, "aktualny");
-      drawUboat();
-      drawFletcherInspiredDestroyer();
+      drawSensorsAndVectors();
+      drawGunnery();
+      drawTarget();
+      drawEffects();
+      drawDestroyer();
+      drawScope(sonarCtx, "sonar");
+      drawScope(radarCtx, "radar");
 
       const order = speedOrders[ship.targetSpeedIndex];
       const currentCourse = radToCourse(ship.heading);
       const rudderSide = ship.rudder < -0.5 ? "LEWO " : ship.rudder > 0.5 ? "PRAWO" : "ZERO ";
       const ordered = ship.orderedCourse === null ? "---" : Math.round(ship.orderedCourse).toString().padStart(3, "0");
+      const aim = getAimPoint();
+      const miss = target.alive ? Math.round(Math.hypot(aim.x - target.x, aim.y - target.y)) : "---";
 
       consolePanel.textContent =
-`KONSOLA STEROWANIA OKRETEM
+`KONSOLA STEROWANIA OKRETEM / ARTYLERIA
 ` +
-`------------------------------------------------------------
+`--------------------------------------------------------------------------------
 ` +
-`ROZKAZ MASZYN: ${order.name.padEnd(13)} | AKTUALNA PREDKOSC: ${(ship.speed / 10).toFixed(1).padStart(4)} w. | KURS: ${currentCourse.toFixed(0).padStart(3)}°
+`MASZYNY: ${order.name.padEnd(13)} | PREDKOSC: ${(ship.speed / 10).toFixed(1).padStart(4)} w. | KURS: ${currentCourse.toFixed(0).padStart(3)}° | ZADANY: ${ordered}°
 ` +
-`STER: ${rudderSide} ${Math.abs(ship.rudder).toFixed(0).padStart(2)}°              | ZADANY KURS: ${ordered}° | ${ship.autopilot ? "ZMIANA KURSU" : "STER RECZNY"}
+`STER: ${rudderSide} ${Math.abs(ship.rudder).toFixed(0).padStart(2)}° | ARTYLERIA: ${guns.mode.padEnd(6)} | NAMIERZENIE: ${radToCourse(guns.bearing).toFixed(0).padStart(3)}° | NASTAWA ZASIEGU: ${Math.round(guns.range).toString().padStart(3)} m | BLAD: ${miss} m
 ` +
-`SONAR: ${uboat.detected ? "KONTAKT ZANURZONY" : "BRAK KONTAKTU"}         | ZASIEG: ${Math.round(sonar.range)} m
+`WPISYWANIE KURSU: ${courseInput || "---"} | STATUS: ${lastMessage}
 ` +
-`WPISYWANIE KURSU: ${courseInput || "---"}
-` +
-`STEROWANIE: W/S = predkosc | A/D = ster +/-5° | SPACJA = ster zero | X = stop | 000-359 + Enter = kurs`;
+`STEROWANIE: W/S predkosc, A/D ster, 000-359+Enter kurs, X stop | DZIALA: < > obrot, O/L zasięg, F auto, G manual, SPACJA ogien`;
     }
 
     function loop(now) {
       const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
-      updateOrders();
+      updateOrders(dt);
       updatePhysics(dt);
+      updateProjectiles(dt);
       render();
       requestAnimationFrame(loop);
     }
