@@ -10,7 +10,7 @@
   --sonar: #6fe25d;
   --radar: #4ab6ff;
   --guns: #d9aa2a;
-  --visibility: #d7e58a;
+  --visibility: #cfd7b2;
 }
 
 body {
@@ -136,8 +136,8 @@ aside {
 
 #console {
   grid-column: 1 / 3;
-  min-height: 82px;
-  max-height: 118px;
+  min-height: 78px;
+  max-height: 112px;
   overflow: hidden;
   background: linear-gradient(180deg, #121812, #070b08);
   border: 1px solid var(--line);
