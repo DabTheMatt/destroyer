@@ -1,11 +1,13 @@
-# U-Booty i Niszczyciele — v9
+# U-Booty i Niszczyciele — v10
 
 Zmiany:
-- okręt powiększa się wizualnie przy zoomie,
-- dodany podpis kręgu widoczności,
-- samoloty są widoczne na radarze,
-- radar pokazuje osobne okno RADAR LOT z namiarem i odległością,
-- "wiek" kontaktu zmieniony na "OD ECHA" — czas od ostatniego echa radarowego,
-- stożek sonaru ma delikatny gradient,
-- w stożku sonaru widać rozchodzącą się falę,
-- sonarowe fale są rysowane tylko w stożku.
+- radar ma przycisk WŁ./WYŁ.,
+- klawisze + i - dublują W/S dla telegrafu maszynowego,
+- R resetuje działa do pozycji początkowej,
+- działa 5”/38 obracają się z prędkością Mk 30 około 28,75°/s,
+- każde z pięciu dział ma własną pozycję, sektor ostrzału, reload i losowe opóźnienie strzału,
+- działa dziobowe nie strzelają przez rufę,
+- samoloty Condor spawnują z różnych krawędzi i lecą w okolice okrętu,
+- wykryte cele mają osobne, klikalne okna informacyjne,
+- kliknięcie w okno kontaktu centruje kamerę na celu,
+- sonar ma mocniejszy gradient stożka.
