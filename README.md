@@ -1,11 +1,12 @@
-# U-Booty i Niszczyciele — v30
+# U-Booty i Niszczyciele — v49
 
 Zmiany:
-- WIATR/INFO/FALE wymuszone w prawym dolnym rogu mapy,
-- komunikat tutorialu przesunięty wyżej,
-- klawisz Numpad2 służy do wpisywania kursu; zwykłe 2 przełącza bomby głębinowe,
-- słońce/księżyc bliżej krawędzi i bez szerokiej poświaty,
-- domyślne skalowanie UI: 150%,
-- tutorial ma dodatkową pierwszą planszę o niszczycielu Fletcher,
-- gracz wpisuje imię/pseudonim i tutorial zwraca się do niego: „kapitanie …”,
-- test składni i test startowy wykonane przy 150%.
+- kręgi wykrycia radaru są półprzezroczyste i niebieskie,
+- sonar ma szerszą tolerancję wykrywania kontaktów podwodnych,
+- Numpad1 pozostaje do wprowadzania kursu,
+- radarowy ekran po prawej pokazuje także statki konwoju,
+- radar wykrywa konwój i dodaje kontakty do listy,
+- okna kontaktów pokazują informacje z detectedContacts,
+- bomby głębinowe: można włączyć niezależnie 1, 2 lub 3 wyrzutnie,
+- przyciski wyrzutni i głębokości zapalają się/gasną zgodnie ze stanem,
+- sprawdzone: node --check i test startowy.

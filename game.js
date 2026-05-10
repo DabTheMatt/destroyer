@@ -30,7 +30,12 @@ const aircraftToggle = document.getElementById("aircraftToggle");
 const tutorialBtn = document.getElementById("tutorialBtn");
 const tutorialPanel = document.getElementById("tutorialPanel");
 const trainingMission1Btn = document.getElementById("trainingMission1Btn");
+const trainingMission2Btn = document.getElementById("trainingMission2Btn");
+const trainingMission3Btn = document.getElementById("trainingMission3Btn");
 const captainNameInput = document.getElementById("captainNameInput");
+const captainModal = document.getElementById("captainModal");
+const captainModalInput = document.getElementById("captainModalInput");
+const captainModalBtn = document.getElementById("captainModalBtn");
 const tutorialPrompt = document.getElementById("tutorialPrompt");
 const tutorialText = document.getElementById("tutorialText");
 const tutorialPrevBtn = document.getElementById("tutorialPrevBtn");
@@ -63,6 +68,7 @@ const courseRead = document.getElementById("courseRead");
 const weaponRead = document.getElementById("weaponRead");
 const windShort = document.getElementById("windShort");
 
+const SMOKE_COLOR = "rgba(45,48,46,";
 const WORLD_W = 30000;
 const WORLD_H = 30000;
 const KNOT_TO_MS = 0.514444;
@@ -105,9 +111,10 @@ const ship = {
 
 const camera = { x: 0, y: 0, anchorX: 0.5, anchorY: 0.5, manualOffsetX: 0, manualOffsetY: 0 };
 
-const sonar = { on: false, range: 2500, minRange: 300, bearing: degToRad(0), beamWidth: degToRad(14), ping: 0 };
+const sonar = { on: false, range: 4200, minRange: 100, bearing: degToRad(0), beamWidth: degToRad(18), ping: 0 };
 const radar = { on: true, range: 9500, sweepAngle: 0 };
 const HORIZON_RANGE = 20000;
+const CONVOY_LABEL = "Konwój HX-229 → Liverpool — 12 w.";
 
 const weather = {
   t: 0,
@@ -152,9 +159,16 @@ const turrets = [
 let nextSurfaceContactId = 1;
 let nextSubContactId = 1;
 let target = randomTarget();
+const convoyShips = [];
+let convoyCourseBase = 91;
+let convoyZigIndex = 0;
+let convoyTimer = 300;
 let lastRadarContact = null;
 let lastRadarAirContact = null;
 let lastSonarContact = null;
+const detectedContacts = [];
+let sonarSweepContacts = new Map();
+let friendlyAircraft = []; // v38: Wellingtony wyłączone
 let inputMode = "COURSE";
 let courseInput = "";
 let angleInput = "";
@@ -163,6 +177,7 @@ let windLayerOn = true;
 let infoOn = true;
 let seaLayerOn = true;
 let gameStarted = false;
+let hasStartedGame = false;
 let autoFire = false;
 let uiFontScale = 1.0;
 let weatherEnabled = true;
@@ -172,11 +187,13 @@ let timeCompression = 1;
 let lastWatchName = null;
 let tutorialMode = false;
 let tutorialStep = 0;
+let tutorialMission = 1;
 let tutorialStep1Complete = false;
 let captainName = "Kapitanie";
 let resources = { fuel:100, ammo5:520, ammoAA:2400, depthCharges:42, crewFatigue:8, engineWear:6, morale:86 };
 let activeWeapon = "guns";
 let dcLauncher = "stern";
+const dcLaunchersSelected = new Set(["stern"]);
 let dcDepth = 90;
 let engineOsc = null;
 let engineGain = null;
@@ -186,6 +203,7 @@ let navFollowEnabled = true;
 let navHardTurn = false;
 const navWaypoints = [];
 let audioCtx = null;
+let audioUnlocked = false;
 let lastTime = performance.now();
 let wakeBuild = 0;
 
@@ -198,6 +216,7 @@ const sonarPulses = [];
 const smoke = [];
 const aaTracers = [];
 const aaBursts = [];
+const depthCharges = [];
 const wrecks = [];
 const aircraft = Array.from({ length: 3 }, (_, i) => makeCondor(i));
 const subs = Array.from({ length: 3 }, () => makeSub());
@@ -209,11 +228,115 @@ uiFontScale = 1.5;
 fontScaleSlider.value = "150";
 fontScaleValue.textContent = "150%";
 document.documentElement.style.setProperty("--ui-scale", "1.5");
+resumeGameBtn.classList.add("hidden");
+document.body.classList.remove("hasStartedGame");
 document.body.classList.add("menuOpen");
 bindEvents();
+bindTutorialFallbacks();
 requestAnimationFrame(loop);
 
+
+function bindTutorialFallbacks() {
+  tutorialBtn.onclick = () => {
+    tutorialPanel.classList.toggle("hidden");
+    optionsPanel.classList.add("hidden");
+    startAudioNow();
+  };
+  trainingMission1Btn.onclick = () => { startAudioNow(); startTutorialMission(1); };
+  trainingMission2Btn.onclick = () => { startAudioNow(); startTutorialMission(2); };
+  trainingMission3Btn.onclick = () => { startAudioNow(); startTutorialMission(3); };
+  tutorialNextBtn.onclick = () => {
+    const steps = getTutorialSteps();
+    if (tutorialStep >= steps.length - 1) {
+      tutorialPrompt.classList.add("hidden");
+      tutorialMode = false;
+      return;
+    }
+    tutorialStep += 1;
+    showTutorialStep();
+  };
+  tutorialPrevBtn.onclick = () => {
+    tutorialStep = Math.max(0, tutorialStep - 1);
+    showTutorialStep();
+  };
+  tutorialCloseBtn.onclick = () => {
+    tutorialPrompt.classList.add("hidden");
+    tutorialMode = false;
+  };
+}
+
+
+function handleGlobalDepthClick(event) {
+  if (event.target && handleDepthButton(event.target.id)) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
+
 function bindEvents() {
+  document.addEventListener("click", handleGlobalDepthClick, true);
+  startMenu.addEventListener("click", startAudioNow);
+  captainModalBtn.addEventListener("click", () => {
+    setCaptainNameFromInput(captainModalInput.value);
+    captainModal.classList.add("hidden");
+    startAudioNow();
+  });
+  
+  newGameBtn.addEventListener("click", () => {
+    resetGameState();
+    startMenu.classList.add("hidden");
+    document.body.classList.remove("menuOpen");
+    resumeGameBtn.classList.remove("hidden");
+    gameStarted = true;
+    hasStartedGame = true;
+    document.body.classList.add("hasStartedGame");
+    startAudioNow();
+    lastMessage = "Nowa gra rozpoczęta od początku.";
+  });
+
+  captainModalInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      setCaptainNameFromInput(captainModalInput.value);
+      captainModal.classList.add("hidden");
+      startAudioNow();
+    }
+  });
+  if (!window.__tutorialEventsBound) {
+    window.__tutorialEventsBound = true;
+
+  tutorialBtn.addEventListener("click", () => {
+    tutorialPanel.classList.toggle("hidden");
+    optionsPanel.classList.add("hidden");
+  });
+
+  trainingMission1Btn.addEventListener("click", () => startTutorialMission(1));
+  trainingMission2Btn.addEventListener("click", () => startTutorialMission(2));
+  trainingMission3Btn.addEventListener("click", () => startTutorialMission(3));
+
+  tutorialNextBtn.addEventListener("click", () => {
+    const steps = getTutorialSteps();
+    if (tutorialStep >= steps.length - 1) {
+      tutorialPrompt.classList.add("hidden");
+      tutorialMode = false;
+      return;
+    }
+    tutorialStep += 1;
+    showTutorialStep();
+  });
+
+  tutorialPrevBtn.addEventListener("click", () => {
+    tutorialStep = Math.max(0, tutorialStep - 1);
+    showTutorialStep();
+  });
+
+  tutorialCloseBtn.addEventListener("click", () => {
+    tutorialPrompt.classList.add("hidden");
+    tutorialMode = false;
+  });
+
+  }
+  window.addEventListener("pointerdown", startAudioNow, { once: true });
+  window.addEventListener("keydown", startAudioNow, { once: true });
   window.addEventListener("resize", resizeAll);
 
   sonarButton.addEventListener("click", () => {
@@ -227,19 +350,11 @@ function bindEvents() {
     radarButton.textContent = radar.on ? "WYŁĄCZ" : "WŁĄCZ";
   });
 
-  newGameBtn.addEventListener("click", () => {
-    resetGameState();
-    startMenu.classList.add("hidden");
-    document.body.classList.remove("menuOpen");
-    resumeGameBtn.classList.remove("hidden");
-    gameStarted = true;
-    lastMessage = "Nowa gra rozpoczęta.";
-  });
-
   resumeGameBtn.addEventListener("click", () => {
     startMenu.classList.add("hidden");
     document.body.classList.remove("menuOpen");
     gameStarted = true;
+    startAudioNow();
     lastMessage = "Powrót do gry.";
   });
 
@@ -248,12 +363,6 @@ function bindEvents() {
   radarButton.addEventListener("click", () => {
     radar.on = !radar.on;
     radarButton.textContent = radar.on ? "WYŁĄCZ" : "WŁĄCZ";
-  });
-
-  newGameBtn.addEventListener("click", () => {
-    startMenu.classList.add("hidden");
-    gameStarted = true;
-    lastMessage = "Nowa gra rozpoczęta.";
   });
 
   
@@ -267,7 +376,7 @@ function bindEvents() {
   });
 
   tutorialNextBtn.addEventListener("click", () => {
-    if (tutorialStep >= tutorialSteps.length - 1) {
+    if (tutorialStep >= getTutorialSteps().length - 1) {
       tutorialPrompt.classList.add("hidden");
       tutorialMode = false;
       return;
@@ -340,19 +449,19 @@ function bindEvents() {
   windBtn.addEventListener("click", () => {
     windLayerOn = !windLayerOn;
     windBtn.textContent = windLayerOn ? "WIATR: WŁ." : "WIATR: WYŁ.";
-    windBtn.classList.toggle("on", windLayerOn);
+    windBtn.classList.toggle("on", windLayerOn); windBtn.classList.toggle("active", windLayerOn);
   });
 
   infoBtn.addEventListener("click", () => {
     infoOn = !infoOn;
     infoBtn.textContent = infoOn ? "INFO: WŁ." : "INFO: WYŁ.";
-    infoBtn.classList.toggle("on", infoOn);
+    infoBtn.classList.toggle("on", infoOn); infoBtn.classList.toggle("active", infoOn);
   });
 
   seaBtn.addEventListener("click", () => {
     seaLayerOn = !seaLayerOn;
     seaBtn.textContent = seaLayerOn ? "FALE: WŁ." : "FALE: WYŁ.";
-    seaBtn.classList.toggle("on", seaLayerOn);
+    seaBtn.classList.toggle("on", seaLayerOn); seaBtn.classList.toggle("active", seaLayerOn);
   });
 
   game.addEventListener("wheel", (event) => {
@@ -424,15 +533,29 @@ function bindEvents() {
       x: world.x,
       y: world.y
     });
+    ensureNavStartSpeed();
     lastMessage = `Dodano punkt kursu ${navWaypoints.length}/5.`;
   });
 
   weaponRead.addEventListener("click", (event) => {
+    if (event.target && handleDepthButton(event.target.id)) return;
     if (event.target && event.target.id === "autoFireButton") {
       autoFire = !autoFire;
       guns.mode = autoFire ? "AUTO" : "MANUAL";
       lastMessage = autoFire ? "Automatyczne prowadzenie ognia włączone." : "Automatyczne prowadzenie ognia wyłączone.";
     }
+    if (event.target && event.target.id === "dcCycleButton") {
+      dcLauncher = dcLauncher === "stern" ? "left" : dcLauncher === "left" ? "right" : "stern";
+      activeWeapon = "depth";
+      updateDepthChargeButtons();
+    }
+    if (event.target && event.target.id === "dcLeftMini") { dcLauncher = "left"; activeWeapon = "depth"; updateDepthChargeButtons(); }
+    if (event.target && event.target.id === "dcRightMini") { dcLauncher = "right"; activeWeapon = "depth"; updateDepthChargeButtons(); }
+    if (event.target && event.target.id === "dcSternMini") { dcLauncher = "stern"; activeWeapon = "depth"; updateDepthChargeButtons(); }
+    if (event.target && event.target.id === "dcShallowMini") { dcDepth = 30; activeWeapon = "depth"; updateDepthChargeButtons(); }
+    if (event.target && event.target.id === "dcMediumMini") { dcDepth = 90; activeWeapon = "depth"; updateDepthChargeButtons(); }
+    if (event.target && event.target.id === "dcDeepMini") { dcDepth = 180; activeWeapon = "depth"; updateDepthChargeButtons(); }
+    if (event.target && event.target.id === "dcDropMini") { activeWeapon = "depth"; dropDepthCharge(); }
   });
 
   window.addEventListener("keydown", onKeyDown);
@@ -445,6 +568,14 @@ function bindEvents() {
 
 
 
+
+function setCaptainNameFromInput(value) {
+  captainName = (value || "").trim();
+  if (captainNameInput) captainNameInput.value = captainName;
+  if (captainModalInput) captainModalInput.value = captainName;
+}
+
+
 function captainAddress() {
   const raw = (captainNameInput && captainNameInput.value ? captainNameInput.value.trim() : "") || captainName || "";
   return raw ? `kapitanie ${raw}` : "kapitanie";
@@ -452,36 +583,56 @@ function captainAddress() {
 
 function getTutorialSteps() {
   const cap = captainAddress();
+  if (tutorialMission === 1) {
+    return [
+      `Mapa i oznaczenia, ${cap}. To jest widok taktyczny z góry. Twój niszczyciel Fletcher jest na środku obserwacji, a ocean przesuwa się względem okrętu.`,
+      `Okręgi na mapie oznaczają zasięgi: radar, sonar, widoczność oraz uzbrojenie. Podpisy przy okręgach mówią, jaki system pokazują i jaki mają dystans.`,
+      `Kontakty nawodne, podwodne i lotnicze mają różne symbole i kolory. Kontakt wykryty radarem lub sonarem może dostać czerwony przewidywany wektor ruchu po kilku odczytach.`,
+      `Konwój Liberty płynie w szyku 4 × 4 za Fletcherem. Statki są większe od niszczyciela i płyną zygzakiem, aby utrudnić atak U-Bootom.`,
+      `Radar pokazuje kontakty nawodne i lotnicze, sonar tylko podwodne. Stożek sonaru pokazuje kierunek nasłuchu, a łuki w nim symbolizują aktywną falę sonaru.`
+    ];
+  }
+  if (tutorialMission === 2) {
+    return [
+      `Sterowanie okrętem, ${cap}. Klawisze W i S sterują maszynami, czyli zwiększają albo zmniejszają zadaną prędkość. Klawisze A i D wychylają ster.`,
+      `Wektor AKTUALNY pokazuje kierunek, w którym ustawiony jest okręt. Wektor ZADANY pokazuje kurs, do którego okręt zmierza po wpisaniu kursu lub w autopilocie.`,
+      `Kurs wpisujesz cyframi, na przykład 2 4 8 i Enter. Numeryczna klawiatura służy do wpisywania kursów; zwykły klawisz 2 wybiera bomby głębinowe.`,
+      `Klawisz N włącza wytyczanie trasy punktami. Kliknij do 5 punktów na mapie. Klawisz B kasuje kurs, a V włącza lub wyłącza automatyczne podążanie po trasie.`,
+      `Zakrzywiona linia przed okrętem pokazuje przewidywany tor. Strzałka na jej końcu oznacza miejsce, w którym okręt znajdzie się za około 30 sekund.`
+    ];
+  }
   return [
-    `Witaj, ${cap}, na pokładzie niszczyciela klasy Fletcher. Fletcher był jednym z najważniejszych amerykańskich niszczycieli II wojny światowej: szybki, zwrotny, z silnym uzbrojeniem artyleryjskim i przeciwlotniczym. Okręty tej klasy służyły na Atlantyku i Pacyfiku, eskortowały konwoje, osłaniały lotniskowce i polowały na okręty podwodne. Marynarze cenili je za szybkość, dzielność morską i solidność, choć służba na nich była ciasna, mokra i wyczerpująca. Dziś poznasz podstawy dowodzenia takim okrętem.`,
-    `Zaczniemy od najprostszych rzeczy, ${cap}. Klawisze W i S sterują maszynami i ustalają prędkość okrętu, a klawisze A i D wychylenie steru. Maksymalne wychylenie steru w tej symulacji to ${ship.maxRudder}°. Spróbuj zwiększyć prędkość i wychylić ster.`,
-    `Na mapie widzisz dwa podstawowe wektory. AKTUALNY pokazuje kierunek, w którym ustawiony jest okręt. ZADANY pokazuje kurs, do którego zmierza autopilot lub kurs wpisany z klawiatury.`,
-    `Kurs zadany możesz wpisać cyframi. Na przykład wpisz 2 4 8, a potem Enter, aby zadać kurs 248°. Okręt nie obróci się natychmiast — będzie skręcał zgodnie z prędkością, sterem i bezwładnością.`,
-    `Zakrzywiona linia na mapie pokazuje przewidywany tor okrętu. Strzałka na końcu oznacza miejsce, w którym okręt znajdzie się za około 30 sekund, jeśli utrzyma obecny ruch.`,
-    `Przetestuj teraz, ${cap}: zwiększ prędkość, wychyl ster, wpisz kurs i obserwuj wektory. Kiedy skończysz, możesz zamknąć tutorial albo przejść do kolejnych misji w menu.`
+    `Obsługa broni, ${cap}. Klawisz 1 wybiera działa 5”/38, a klawisz 2 wybiera bomby głębinowe. Spacja odpala aktualnie wybraną broń.`,
+    `Działa mają tryb manualny i automatyczny. W manualnym ustawiasz namiar i odległość, w automatycznym załoga obraca działa i ustawia zasięg na wykryty cel.`,
+    `Nie każda wieża może strzelać w każdym kierunku. Działa dziobowe nie strzelają przez rufę, a rufowe nie strzelają przez dziób. Pociski startują z konkretnych wież.`,
+    `Bomby głębinowe mogą być wyrzucane z lewej, prawej burty lub z tylnych racków. W panelu broni ustawiasz wyrzutnię oraz głębokość detonacji: 30, 90 albo 180 m.`,
+    `Sonar służy do wykrywania U-Bootów. Kiedy fala sonaru w stożku przetnie kontakt podwodny, pojawia się krąg kontaktu i słychać sygnał.`
   ];
 }
 
+
 function showTutorialStep() {
+  const steps = getTutorialSteps();
   tutorialPrompt.classList.remove("hidden");
-  const tutorialSteps = getTutorialSteps();
-  tutorialStep = clamp(tutorialStep, 0, tutorialSteps.length - 1);
-  tutorialText.textContent = tutorialSteps[tutorialStep];
+  tutorialStep = clamp(tutorialStep, 0, steps.length - 1);
+  tutorialText.textContent = steps[tutorialStep];
   tutorialPrevBtn.disabled = tutorialStep === 0;
-  tutorialNextBtn.textContent = tutorialStep === tutorialSteps.length - 1 ? "KONIEC" : "DALEJ";
-  tutorialNextBtn.disabled = tutorialStep === 1 && !tutorialStep1Complete;
+  tutorialNextBtn.textContent = tutorialStep === steps.length - 1 ? "KONIEC" : "DALEJ";
+  tutorialNextBtn.disabled = tutorialMission === 2 && tutorialStep === 0 && !tutorialStep1Complete;
 }
 
-function startTutorialMission1() {
-  captainName = (captainNameInput && captainNameInput.value ? captainNameInput.value.trim() : "") || "";
+
+function startTutorialMission(which) {
+  tutorialMission = which;
+  captainName = (captainNameInput && captainNameInput.value ? captainNameInput.value.trim() : captainName) || "";
   resetGameState();
   tutorialMode = true;
   tutorialStep = 0;
-  tutorialStep1Complete = false;
-  // Misja 1: tylko okręt, brak kontaktów.
+  tutorialStep1Complete = true;
+  if (which === 2) tutorialStep1Complete = false;
   if (target) target.alive = false;
   aircraft.splice(0, aircraft.length);
-  subs.splice(0, subs.length);
+  if (which !== 3) subs.splice(0, subs.length);
   radarEchoes.length = 0;
   sonarPulses.length = 0;
   lastRadarContact = null;
@@ -492,19 +643,221 @@ function startTutorialMission1() {
   document.body.classList.remove("menuOpen");
   resumeGameBtn.classList.remove("hidden");
   gameStarted = true;
+  hasStartedGame = true;
+  document.body.classList.add("hasStartedGame");
+  startAudioNow();
   showTutorialStep();
-  lastMessage = "Misja treningowa 1: sterowanie okrętem.";
+  lastMessage = which === 1 ? "Tutorial: mapa i oznaczenia." : which === 2 ? "Tutorial: sterowanie okrętem." : "Tutorial: obsługa broni.";
+}
+
+function startTutorialMission1() { startTutorialMission(1); }
+
+
+function initConvoy() {
+  convoyShips.length = 0;
+  const spacing = 1000;
+  const heading = degToRad(91);
+  const across = heading + Math.PI / 2;
+
+  // Konwój za Fletcherem: cztery kolumny i cztery rzędy, front konwoju po prawej stronie mapy.
+  const frontCenterX = ship.x - Math.cos(heading) * 2000;
+  const frontCenterY = ship.y - Math.sin(heading) * 2000;
+
+  let id = 1;
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 4; col++) {
+      const lateral = (col - 1.5) * spacing;
+      const behind = row * spacing;
+      convoyShips.push({
+        contactId: id++,
+        contactName: "Liberty",
+        trackKind: "convoy",
+        x: frontCenterX + Math.cos(across) * lateral - Math.cos(heading) * behind,
+        y: frontCenterY + Math.sin(across) * lateral - Math.sin(heading) * behind,
+        heading,
+        speed: 1.5433,
+        hp: 100,
+        alive: true
+      });
+    }
+  }
+  convoyZigIndex = 0;
+  convoyTimer = 300;
+}
+
+
+function collisionRadius(obj) {
+  if (obj === ship) return 80;
+  if (obj.trackKind === "convoy") return 95;
+  if (obj.trackKind === "surface") return 85;
+  return 60;
+}
+
+function destroySurfaceObject(obj) {
+  if (obj === ship) {
+    lastMessage = "KOLIZJA! Fletcher ciężko uszkodzony.";
+    wrecks.push({ x: ship.x, y: ship.y, t: 0, label: "Fletcher" });
+    ship.speed = 0;
+    ship.targetSpeedIndex = STOP_INDEX;
+    return;
+  }
+  obj.alive = false;
+  wrecks.push({ x: obj.x, y: obj.y, t: 0, label: obj.contactName || "Wrak" });
+}
+
+function updateCollisions() {
+  const objects = [ship];
+  if (target && target.alive) objects.push(target);
+  for (const c of convoyShips) if (c.alive) objects.push(c);
+
+  for (let i = 0; i < objects.length; i++) {
+    for (let j = i + 1; j < objects.length; j++) {
+      const a = objects[i], b = objects[j];
+      const minD = collisionRadius(a) + collisionRadius(b);
+      if (dist(a, b) < minD) {
+        destroySurfaceObject(a);
+        destroySurfaceObject(b);
+        lastMessage = "KOLIZJA! Dwa statki uległy zniszczeniu.";
+      }
+    }
+  }
+}
+
+function updateConvoy(dt) {
+  convoyTimer -= dt;
+  if (convoyTimer <= 0) {
+    convoyZigIndex = 1 - convoyZigIndex;
+    convoyTimer += 300;
+  }
+  const course = convoyZigIndex === 0 ? 87 : 93;
+  const heading = degToRad(course);
+  for (const shipC of convoyShips) {
+    if (!shipC.alive) continue;
+    // Bez płynnego skręcania w kółko: konwój trzyma jeden kurs przez 5 minut,
+    // następnie przechodzi na drugi kurs.
+    shipC.heading = heading;
+    shipC.x = (shipC.x + Math.cos(shipC.heading) * shipC.speed * dt * 4 + WORLD_W) % WORLD_W;
+    shipC.y = (shipC.y + Math.sin(shipC.heading) * shipC.speed * dt * 4 + WORLD_H) % WORLD_H;
+  }
+}
+
+function drawLibertyShip(c) {
+  const p = worldToScreen(c);
+  const scale = clamp(0.08 * zoom, 0.08, 22) * 1.25; // Liberty ~135m
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(c.heading);
+  ctx.scale(scale, scale);
+  ctx.strokeStyle = "rgba(12,18,16,.95)";
+  ctx.fillStyle = "#6d746d";
+  ctx.lineWidth = 1.1 / Math.max(scale, 0.1);
+  ctx.beginPath();
+  ctx.moveTo(66, 0);
+  ctx.lineTo(46, -10);
+  ctx.lineTo(-54, -10);
+  ctx.lineTo(-74, 0);
+  ctx.lineTo(-54, 10);
+  ctx.lineTo(46, 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#9aa398";
+  ctx.fillRect(-18, -6, 28, 12);
+  ctx.fillStyle = "#7e867d";
+  ctx.fillRect(-46, -7, 18, 14);
+  ctx.fillRect(22, -6, 14, 12);
+  ctx.fillStyle = "#3d443f";
+  ctx.fillRect(-4, -4, 7, 8);
+  ctx.restore();
+}
+
+
+function drawConvoyWakes() {
+  ctx.save();
+  for (const c of convoyShips) {
+    if (!c.alive) continue;
+    const stern = { x: c.x - Math.cos(c.heading) * 86, y: c.y - Math.sin(c.heading) * 86 };
+    const p = worldToScreen(stern);
+    ctx.translate(p.x, p.y);
+    ctx.rotate(c.heading);
+    ctx.strokeStyle = "rgba(220,235,225,.20)";
+    ctx.lineWidth = Math.max(0.8, 1.3 * uiFontScale);
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(0, side * 6);
+      ctx.quadraticCurveTo(-35 / metersPerPixel, side * 20 / metersPerPixel, -110 / metersPerPixel, side * 45 / metersPerPixel);
+      ctx.stroke();
+    }
+    ctx.setTransform(1,0,0,1,0,0);
+  }
+  ctx.restore();
+}
+
+function drawConvoyVector() {
+  const heading = degToRad(convoyZigIndex === 0 ? 87 : 93);
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,210,90,.30)";
+  ctx.fillStyle = "rgba(255,210,90,.30)";
+  ctx.lineWidth = Math.max(0.8, 1.1 * uiFontScale);
+  ctx.setLineDash([7, 6]);
+
+  for (const c of convoyShips) {
+    if (!c.alive) continue;
+    const p = worldToScreen(c);
+    const len = 260 / metersPerPixel;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + Math.cos(heading) * len, p.y + Math.sin(heading) * len);
+    ctx.stroke();
+
+    const ex = p.x + Math.cos(heading) * len;
+    const ey = p.y + Math.sin(heading) * len;
+    ctx.save();
+    ctx.translate(ex, ey);
+    ctx.rotate(heading);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-7, -3.5);
+    ctx.lineTo(-7, 3.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function drawConvoy() {
+  for (const c of convoyShips) if (c.alive) drawLibertyShip(c);
+}
+
+function makeTrainingSubAhead() {
+  const d = 2200;
+  return {
+    contactId: nextSubContactId++,
+    contactName: "U-Boot",
+    trackKind: "sub",
+    x: ship.x + Math.cos(ship.heading + sonar.bearing) * d,
+    y: ship.y + Math.sin(ship.heading + sonar.bearing) * d,
+    heading: ship.heading + Math.PI,
+    speed: 1.2,
+    alive: true
+  };
 }
 
 function resetGameState() {
   ship.x = WORLD_W / 2;
   ship.y = WORLD_H * 0.62;
-  ship.heading = degToRad(0);
+  ship.heading = degToRad(91);
   ship.speed = 0;
   ship.targetSpeedIndex = STOP_INDEX;
   ship.rudder = 0;
-  ship.orderedCourse = null;
+  ship.orderedCourse = 91;
   ship.autopilot = false;
+  sonar.on = true;
+  sonar.bearing = 0;
+  sonar.ping = 0;
 
   camera.manualOffsetX = 0;
   camera.manualOffsetY = 0;
@@ -514,8 +867,9 @@ function resetGameState() {
   nextSubContactId = 1;
   contactTrackSeq = 1;
   target = randomTarget();
+  initConvoy();
   aircraft.splice(0, aircraft.length, ...Array.from({ length: 3 }, (_, i) => makeCondor(i)));
-  subs.splice(0, subs.length, ...Array.from({ length: 4 }, () => makeSub()));
+  subs.splice(0, subs.length, makeTrainingSubAhead(), ...Array.from({ length: 3 }, () => makeSub()));
 
   lastRadarContact = null;
   lastRadarAirContact = null;
@@ -536,16 +890,26 @@ function resetGameState() {
   gameClock = 12 * 3600;
   timeCompression = 1;
   resources = { fuel:100, ammo5:520, ammoAA:2400, depthCharges:42, crewFatigue:8, engineWear:6, morale:86 };
-  activeWeapon = "guns"; dcLauncher = "stern"; dcDepth = 90; updateDepthChargeButtons();
+  activeWeapon = "guns"; dcLauncher = "stern"; dcLaunchersSelected.clear(); dcLaunchersSelected.add("stern"); dcDepth = 90; updateDepthChargeButtons();
   setTimeCompression(1);
   lastMessage = "Nowa gra rozpoczęta.";
 }
 
 function toggleGameMenu() {
   if (startMenu.classList.contains("hidden")) {
-    gameStarted = false; startMenu.classList.remove("hidden"); document.body.classList.add("menuOpen"); resumeGameBtn.classList.remove("hidden"); lastMessage = "Gra zatrzymana — menu.";
+    gameStarted = false;
+    startMenu.classList.remove("hidden");
+    document.body.classList.add("menuOpen");
+    resumeGameBtn.classList.toggle("hidden", !hasStartedGame);
+    lastMessage = "Gra zatrzymana — menu.";
   } else {
-    startMenu.classList.add("hidden"); document.body.classList.remove("menuOpen"); gameStarted = true; lastMessage = "Powrót do gry.";
+    startMenu.classList.add("hidden");
+    document.body.classList.remove("menuOpen");
+    gameStarted = true;
+    hasStartedGame = true;
+    document.body.classList.add("hasStartedGame");
+    startAudioNow();
+    lastMessage = "Powrót do gry.";
   }
 }
 
@@ -711,6 +1075,16 @@ function uiPx(px) {
 }
 
 
+function startAudioNow() {
+  audioUnlocked = true;
+  try {
+    ensureAudio();
+    updateEngineSound();
+  } catch (error) {
+    // Browser may require a gesture; all menu clicks/keys retry.
+  }
+}
+
 function ensureAudio() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === "suspended") audioCtx.resume();
@@ -765,6 +1139,26 @@ function randomTarget() {
     maxHp: 100,
     alive: true,
     turnTimer: 5
+  };
+}
+
+
+function makeWellington(index = 0) {
+  const side = Math.random() < 0.5 ? -1 : 1;
+  return {
+    active: true,
+    contactId: index + 1,
+    friendly: true,
+    trackKind: "friendlyAir",
+    x: ship.x + side * (5200 + Math.random() * 4500),
+    y: ship.y - 5200 + Math.random() * 6000,
+    heading: Math.random() * Math.PI * 2,
+    speed: 68 + Math.random() * 16,
+    altitude: 900 + Math.random() * 1300,
+    detectRange: 5200,
+    lastSeenX: null,
+    lastSeenY: null,
+    lastSeenAge: 999
   };
 }
 
@@ -921,8 +1315,20 @@ function weatherName(rain) {
 }
 
 
+
+function ensureNavStartSpeed() {
+  const currentKnots = Math.abs(ship.speed * MS_TO_KNOT);
+  if (currentKnots < 0.3) {
+    // 1/3 ahead — w tej symulacji odpowiada niskiemu ustawieniu telegrafu naprzód.
+    // STOP_INDEX + 2 zwykle odpowiada ok. 1/3 naprzód w tablicy rozkazów prędkości.
+    ship.targetSpeedIndex = Math.min(speedOrders.length - 1, STOP_INDEX + 2);
+    lastMessage = "AUTONAV: 1/3 NAPRZÓD.";
+  }
+}
+
 function updateNavigationPlan() {
   navHardTurn = false;
+  if (navWaypoints.length > 0) ensureNavStartSpeed();
   if (!navFollowEnabled || navWaypoints.length === 0) return;
 
   let next = navWaypoints[0];
@@ -961,9 +1367,23 @@ function updateNavigationPlan() {
   if ((turn > 65 || (nextTurn > 75 && range < 1200)) && ship.targetSpeedIndex > 3) ship.targetSpeedIndex = 3;
 }
 
+
+function changeSpeedOrder(delta) {
+  ship.targetSpeedIndex = clamp(ship.targetSpeedIndex + delta, 0, speedOrders.length - 1);
+  lastMessage = `Telegraf: ${speedOrders[ship.targetSpeedIndex].name}.`;
+}
+
+function updateArrowPan(dt) {
+  const pan = 900 * dt / Math.max(0.3, zoom);
+  if (keys.has("arrowleft")) camera.manualOffsetX -= pan;
+  if (keys.has("arrowright")) camera.manualOffsetX += pan;
+  if (keys.has("arrowup")) camera.manualOffsetY -= pan;
+  if (keys.has("arrowdown")) camera.manualOffsetY += pan;
+}
+
 function updateOrders(dt) {
-  if (once("arrowup") || once("w") || once("+")) ship.targetSpeedIndex = clamp(ship.targetSpeedIndex + 1, 0, speedOrders.length - 1);
-  if (once("arrowdown") || once("s") || once("-")) ship.targetSpeedIndex = clamp(ship.targetSpeedIndex - 1, 0, speedOrders.length - 1);
+  if (once("w") || once("+") || once("=") || once("add")) changeSpeedOrder(1);
+  if (once("s") || once("-") || once("subtract")) changeSpeedOrder(-1);
 
   if (once("arrowleft") || once("a")) {
     ship.rudder = clamp(ship.rudder - 5, -ship.maxRudder, ship.maxRudder);
@@ -1022,19 +1442,19 @@ function updateOrders(dt) {
 
 
 function updateAutoFire(dt) {
-  if (!autoFire || !target.alive) return;
+  if (!autoFire || !target.alive || activeWeapon !== "guns") return;
   guns.mode = "AUTO";
 
   const desired = angleToPoint(ship, target);
   const range = dist(ship, target);
   guns.bearing += clamp(angleDiffRad(desired, guns.bearing), -guns.turnRate * dt, guns.turnRate * dt);
-  guns.range += clamp(range - guns.range, -1500 * dt, 1500 * dt);
+  guns.range = clamp(guns.range + clamp(range - guns.range, -2500 * dt, 2500 * dt), guns.minRange, guns.maxRange);
 
   const aimError = Math.abs(angleDiffRad(desired, guns.bearing));
   const rangeError = Math.abs(guns.range - range);
   const rangeReady = range >= guns.minRange && range <= guns.maxRange;
 
-  if (aimError < degToRad(4.5) && rangeReady && rangeError < 220) {
+  if (aimError < degToRad(5.5) && rangeReady && rangeError < 350) {
     fireGuns(true);
   }
 }
@@ -1074,9 +1494,12 @@ function updatePhysics(dt) {
   if (wakeBuild > 0.05) addWake();
 
   if (Math.random() < dt * 4 && Math.abs(ship.speed) > 0.4) {
-    smoke.push({ x: ship.x - Math.cos(ship.heading) * 22, y: ship.y - Math.sin(ship.heading) * 22, t: 0, r: 4 + Math.random() * 3 });
+    smoke.push({ x: ship.x - Math.cos(ship.heading) * 22, y: ship.y - Math.sin(ship.heading) * 22, t: 0, r: 7 + Math.random() * 5, dark: true });
   }
 }
+
+
+function updateFriendlyAircraft(dt) { return; }
 
 function updateTargets(dt) {
   if (target.alive) {
@@ -1182,17 +1605,73 @@ function nearestSonarContact() {
 }
 
 function updateSonar(dt) {
+  if (!sonar.on) {
+    sonarSweepContacts.clear();
+    return;
+  }
+
   sonar.ping -= dt;
-  if (!sonar.on) return;
   if (sonar.ping <= 0) {
-    const contact = nearestSonarContact();
     sonarPulses.push({ x: ship.x, y: ship.y, angle: sonar.bearing + ship.heading, t: 0 });
-    if (contact) {
-      recordContactDetection(contact, "sub", "sonar");
-      lastSonarContact = { x: contact.x, y: contact.y, bearing: radToCourse(angleToPoint(ship, contact)), range: Math.round(dist(ship, contact)), age: 0, name: contactDisplayName(contact, "sub", true), predicted: predictedCourseLine(contact) };
+    blip(1450, 0.055, 0.045, "square");
+    sonar.ping = 0.9;
+  }
+
+  const sweepMeters = (weather.t * 900) % sonar.range;
+  for (const sub of subs) {
+    if (!sub.alive) continue;
+    const range = dist(ship, sub);
+    if (range < sonar.minRange || range > sonar.range) continue;
+
+    const bearing = angleToPoint(ship, sub);
+    const diff = Math.abs(angleDiffRad(bearing, sonar.bearing + ship.heading));
+    if (diff > Math.max(sonar.beamWidth / 2, degToRad(20))) continue;
+
+    const id = sub.trackId || sub.contactId || sub;
+    const last = sonarSweepContacts.get(id) ?? -9999;
+
+    // Detekcja nie zależy już wyłącznie od wizualnej fali — jeśli cel jest w stożku,
+    // sonar powinien dawać kontakt co około sekundę.
+    if (weather.t - last > 1.0 || Math.abs(range - sweepMeters) < 420) {
+      sonarSweepContacts.set(id, weather.t);
+      recordContactDetection(sub, "sub", "sonar");
+      rememberContact(sub, "sub", "sonar", radToCourse(bearing), Math.round(range));
+      lastSonarContact = {
+        x: sub.x,
+        y: sub.y,
+        bearing: radToCourse(bearing),
+        range: Math.round(range),
+        age: 0,
+        name: contactDisplayName(sub, "sub", true),
+        predicted: predictedCourseLine(sub)
+      };
+      blip(520, 0.16, 0.20, "triangle");
+      lastMessage = `SONAR: kontakt podwodny ${Math.round(lastSonarContact.bearing)}° / ${lastSonarContact.range} m`;
     }
-    blip(contact ? 520 : 1560, 0.14, contact ? 0.16 : 0.12, contact ? "triangle" : "square");
-    sonar.ping = 2.4;
+  }
+}
+
+
+function rememberContact(object, kind, sensor, bearing, range) {
+  if (!object) return;
+  ensureTrack(object, kind);
+  const id = object.trackId || object.contactId || "?";
+  const existing = detectedContacts.find(c => c.id === id && c.kind === kind);
+  const data = {
+    id, kind, sensor,
+    name: contactDisplayName(object, kind, kind !== "air" || object.identified),
+    bearing, range,
+    age: 0,
+    predicted: predictedCourseLine(object)
+  };
+  if (existing) Object.assign(existing, data);
+  else detectedContacts.push(data);
+}
+
+function updateDetectedContacts(dt) {
+  for (const c of detectedContacts) c.age += dt;
+  for (let i = detectedContacts.length - 1; i >= 0; i--) {
+    if (detectedContacts[i].age > 24) detectedContacts.splice(i, 1);
   }
 }
 
@@ -1201,9 +1680,11 @@ function updateRadar(dt) {
   if (lastRadarContact) lastRadarContact.age += dt;
   if (lastSonarContact) lastSonarContact.age += dt;
   if (lastRadarAirContact) lastRadarAirContact.age += dt;
+  updateDetectedContacts(dt);
 
   radar.sweepAngle = (radar.sweepAngle + dt * Math.PI * 2 / 5.8) % (Math.PI * 2);
   checkRadar(target, "surface");
+  for (const c of convoyShips) if (c.alive) checkRadar(c, "surface");
   if (aircraftEnabled) for (const plane of aircraft) checkRadar(plane, "air");
 
   for (let i = radarEchoes.length - 1; i >= 0; i--) {
@@ -1222,12 +1703,13 @@ function checkRadar(object, kind) {
   if (Math.abs(angleDiffRad(bearing, radar.sweepAngle)) < tolerance) {
     radarEchoes.push({ x: object.x, y: object.y, t: 0, kind });
     recordContactDetection(object, kind, "radar");
+    rememberContact(object, kind, "radar", radToCourse(bearing), Math.round(range));
     if (kind === "surface") {
       lastRadarContact = { bearing: radToCourse(bearing), range: Math.round(range), age: 0, name: contactDisplayName(object, "surface", true), predicted: predictedCourseLine(object) };
     }
     if (kind === "air") {
       const visible = dist(ship, object) <= weather.visibility;
-      lastRadarAirContact = { bearing: radToCourse(bearing), range: Math.round(range), age: 0, name: contactDisplayName(object, "air", visible), predicted: predictedCourseLine(object) };
+      lastRadarAirContact = { bearing: radToCourse(bearing), range: Math.round(range), age: 0, name: `${contactDisplayName(object, "air", visible)} H${Math.round((object.altitude || 1000)/100)*100}m`, predicted: predictedCourseLine(object) };
     }
     blip(kind === "air" ? 1620 : 1320, 0.045, 0.08, "square");
   }
@@ -1287,14 +1769,45 @@ function turretCanFire(turret, bearing) {
 }
 
 function turretWorldPos(turret) {
+  const scaleMeters = 1.0;
+  const cos = Math.cos(ship.heading);
+  const sin = Math.sin(ship.heading);
   return {
-    x: ship.x + Math.cos(ship.heading) * turret.x - Math.sin(ship.heading) * turret.y,
-    y: ship.y + Math.sin(ship.heading) * turret.x + Math.cos(ship.heading) * turret.y
+    x: ship.x + (turret.x * cos - turret.y * sin) * scaleMeters,
+    y: ship.y + (turret.x * sin + turret.y * cos) * scaleMeters
   };
 }
 
 function getAimPoint() {
   return { x: ship.x + Math.cos(guns.bearing) * guns.range, y: ship.y + Math.sin(guns.bearing) * guns.range };
+}
+
+
+function updateDepthCharges(dt) {
+  for (const dc of depthCharges) {
+    dc.t += dt;
+    const f = Math.min(1, dc.t / dc.flightTime);
+    dc.x = dc.startX + (dc.endX - dc.startX) * f;
+    dc.y = dc.startY + (dc.endY - dc.startY) * f;
+
+    if (!dc.splashed && f >= 1) {
+      dc.splashed = true;
+      splashes.push({ x: dc.endX, y: dc.endY, t: 0, maxT: 1.2, hit: false, depthChargeSplash: true });
+      blip(260, 0.06, 0.08, "triangle");
+    }
+
+    if (dc.splashed && !dc.exploded && dc.t >= dc.flightTime + dc.delay) {
+      dc.exploded = true;
+      splashes.push({ x: dc.endX, y: dc.endY, t: 0, maxT: 2.5, hit: false, depthCharge: true, depth: dc.depth, delay: 0, exploded: true });
+      burst(0.42, 0.35, 85);
+    }
+  }
+
+  for (let i = depthCharges.length - 1; i >= 0; i--) {
+    if (depthCharges[i].exploded && depthCharges[i].t > depthCharges[i].flightTime + depthCharges[i].delay + 2.8) {
+      depthCharges.splice(i, 1);
+    }
+  }
 }
 
 function updateProjectiles(dt) {
@@ -1356,14 +1869,19 @@ function draw() {
   drawOcean();
   drawOverlays();
   drawWrecks();
+  drawConvoyWakes();
+  drawConvoy();
+  drawConvoyVector();
   drawTarget();
   drawSubs();
   drawRadarSweep();
   drawSonarCone();
   drawSensorEffects();
-  drawContactVectors();
+  if (typeof drawContactVectors === "function") drawContactVectors();
+  drawDepthCharges();
   drawEffects();
   drawAircraft();
+  /* Wellingtony wyłączone */
   drawAA();
   drawSmoke();
 
@@ -1391,6 +1909,7 @@ function drawOcean() {
   drawWaves();
   drawVisibility();
   drawWake();
+  drawBowWaves();
   if (weatherEnabled) drawRain();
   if (weatherEnabled) drawWind();
 }
@@ -1480,7 +1999,7 @@ function drawWaves() {
   const amp = clamp((0.45 + waveHeight * 3.2) * zoomFactor, 0.45, 14);
   const alpha = clamp(0.035 + waveHeight * 0.075, 0.025, 0.14);
 
-  ctx.strokeStyle = `rgba(190,220,225,${alpha})`;
+  ctx.strokeStyle = "rgba(45,47,46,.55)";
   ctx.lineWidth = clamp(0.8 * zoomFactor, 0.55, 2.3);
 
   const worldLeft = camera.x;
@@ -1568,6 +2087,9 @@ function drawWind() {
   ctx.restore();
 }
 
+
+function drawBowWaves() { return; }
+
 function drawWake() {
   ctx.save();
   for (const mark of wake) {
@@ -1595,7 +2117,7 @@ function drawWake() {
 
 function drawRain() {
   ctx.save();
-  ctx.strokeStyle = `rgba(210,225,220,${0.018 + weather.rain * 0.03})`;
+  ctx.strokeStyle = "rgba(45,47,46,.55)";
   for (let i = 0; i < rainDrops.length; i += 2) {
     const drop = rainDrops[i];
     const x = ((drop.x * game.width + weather.t * weather.windSpeed * 8 * drop.s) % (game.width + 80)) - 40;
@@ -1890,24 +2412,42 @@ function drawSonarCone() {
   ctx.save();
   ctx.translate(center.x, center.y);
   ctx.rotate(angle);
-  ctx.globalCompositeOperation = "screen";
 
-  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
-  gradient.addColorStop(0.00, "rgba(80,255,120,.34)");
-  gradient.addColorStop(0.32, "rgba(80,255,120,.20)");
-  gradient.addColorStop(0.72, "rgba(80,255,120,.10)");
-  gradient.addColorStop(1.00, "rgba(80,255,120,.035)");
-  ctx.fillStyle = gradient;
+  // Clip: wszystko dalej rysowane jest tylko w stożku.
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  for (let a = -half; a <= half + 0.001; a += sonar.beamWidth / 100) {
+  for (let a = -half; a <= half + 0.001; a += sonar.beamWidth / 160) {
     ctx.lineTo(Math.cos(a) * radius, Math.sin(a) * radius);
   }
   ctx.closePath();
-  ctx.fill();
+  ctx.save();
+  ctx.clip();
 
-  ctx.strokeStyle = "rgba(155,255,145,.52)";
-  ctx.lineWidth = Math.max(0.7, 0.95 * uiFontScale);
+  ctx.fillStyle = "rgba(30,255,90,.10)";
+  ctx.fillRect(0, -radius, radius, radius * 2);
+
+  const sweepMeters = (weather.t * 900) % sonar.range;
+  const rings = [
+    sweepMeters,
+    (sweepMeters + sonar.range * 0.33) % sonar.range,
+    (sweepMeters + sonar.range * 0.66) % sonar.range
+  ];
+
+  for (const rm of rings) {
+    const rr = rm / metersPerPixel;
+    const alpha = Math.max(0.18, 0.78 * (1 - rm / sonar.range));
+    ctx.strokeStyle = `rgba(210,255,190,${alpha})`;
+    ctx.lineWidth = Math.max(0.9, 1.35 * uiFontScale);
+    ctx.beginPath();
+    ctx.arc(0, 0, rr, -half, half);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+
+  // cienkie granice stożka
+  ctx.strokeStyle = "rgba(120,255,120,.60)";
+  ctx.lineWidth = Math.max(0.75, 1.0 * uiFontScale);
   ctx.beginPath();
   ctx.moveTo(0, 0);
   ctx.lineTo(Math.cos(-half) * radius, Math.sin(-half) * radius);
@@ -1915,96 +2455,32 @@ function drawSonarCone() {
   ctx.lineTo(Math.cos(half) * radius, Math.sin(half) * radius);
   ctx.stroke();
 
-  // Wyraźna fala aktywnego sonaru: łuk wypełniający tylko zadany stożek.
-  const pulseMeters = (weather.t * 1150) % sonar.range;
-  for (const offset of [0, sonar.range * 0.33, sonar.range * 0.66]) {
-    const rM = (pulseMeters + offset) % sonar.range;
-    const r = rM / metersPerPixel;
-    const alpha = 0.88 * (1 - rM / sonar.range);
-    ctx.strokeStyle = `rgba(220,255,190,${alpha})`;
-    ctx.lineWidth = Math.max(1.8, 2.4 * uiFontScale);
-    ctx.beginPath();
-    for (let a = -half; a <= half + 0.001; a += sonar.beamWidth / 140) {
-      const x = Math.cos(a) * r;
-      const y = Math.sin(a) * r;
-      if (a <= -half + 0.0001) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  }
-
-  ctx.globalCompositeOperation = "source-over";
+  ctx.font = uiFont(11);
+  ctx.fillStyle = "rgba(160,255,140,.85)";
+  ctx.fillText("SONAR", 10, -12);
   ctx.restore();
 
-  // Kontakt w stożku: krąg rozchodzący się od wykrytego kontaktu.
-  if (lastSonarContact && lastSonarContact.age < 3 && lastSonarContact.x !== undefined) {
+  if (lastSonarContact && lastSonarContact.age < 7 && lastSonarContact.x !== undefined) {
     const p = worldToScreen(lastSonarContact);
-    const rr = 18 + lastSonarContact.age * 32;
+    const rr = 18 + lastSonarContact.age * 24;
     ctx.save();
-    ctx.strokeStyle = `rgba(120,255,120,${0.8 * (1 - lastSonarContact.age / 3)})`;
-    ctx.lineWidth = Math.max(1.5, 2.2 * uiFontScale);
+    ctx.strokeStyle = `rgba(90,255,90,${0.85 * (1 - lastSonarContact.age / 7)})`;
+    ctx.fillStyle = `rgba(90,255,90,${0.10 * (1 - lastSonarContact.age / 7)})`;
+    ctx.lineWidth = Math.max(1.2, 1.8 * uiFontScale);
     ctx.beginPath();
     ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-}
-
-
-function drawContactVectors() {
-  const contacts = [];
-  if (typeof target !== "undefined" && target && target.alive) contacts.push(target);
-  if (typeof aircraft !== "undefined") contacts.push(...aircraft);
-  if (typeof subs !== "undefined") contacts.push(...subs);
-
-  ctx.save();
-  for (const c of contacts) {
-    if (!c.trackHistory || c.trackHistory.length < 2 || c.predictedCourse === undefined) continue;
-
-    const p = worldToScreen(c);
-    const courseRad = degToRad(c.predictedCourse);
-    const speed = c.predictedSpeed || 35;
-    const lenMeters = clamp(speed * 180, 900, 4200);
-    const len = lenMeters / metersPerPixel;
-
-    const col = "rgba(255,76,60,.92)";
-    ctx.strokeStyle = col;
-    ctx.fillStyle = col;
-    ctx.lineWidth = clamp(1.1 * uiFontScale / Math.sqrt(Math.max(zoom, 0.2)), 0.85, 2.2);
-    ctx.setLineDash([10, 7]);
-
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
-    ctx.lineTo(p.x + Math.cos(courseRad) * len, p.y + Math.sin(courseRad) * len);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    const ex = p.x + Math.cos(courseRad) * len;
-    const ey = p.y + Math.sin(courseRad) * len;
-
-    ctx.save();
-    ctx.translate(ex, ey);
-    ctx.rotate(courseRad);
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(-10, -4.5);
-    ctx.lineTo(-10, 4.5);
-    ctx.closePath();
     ctx.fill();
+    ctx.stroke();
     ctx.restore();
-
-    if (typeof uiFont === "function") ctx.font = uiFont(12);
-    ctx.fillText(`${String(Math.round(c.predictedCourse)).padStart(3, "0")}°`, ex + 8, ey - 6);
   }
-  ctx.restore();
 }
 
 function drawSensorEffects() {
   for (const echo of radarEchoes) {
     const point = worldToScreen(echo);
     ctx.save();
-    ctx.strokeStyle = echo.kind === "air" ? `rgba(120,210,255,${1 - echo.t / 1.1})` : `rgba(74,182,255,${1 - echo.t / 1.1})`;
-    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = "rgba(74,182,255,.38)";
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.arc(point.x, point.y, 8 + echo.t * 34, 0, Math.PI * 2);
     ctx.stroke();
@@ -2076,6 +2552,9 @@ function drawSubs() {
   }
 }
 
+
+function drawFriendlyAircraft() { return; }
+
 function drawAircraft() {
   if (!aircraftEnabled) return;
   for (const plane of aircraft) {
@@ -2128,7 +2607,7 @@ function drawAA() {
     const p1 = worldToScreen({ x: tracer.x1, y: tracer.y1 });
     const p2 = worldToScreen({ x: tracer.x2, y: tracer.y2 });
     ctx.save();
-    ctx.strokeStyle = `rgba(255,74,53,${0.85 * alpha})`;
+    ctx.strokeStyle = "rgba(45,47,46,.55)";
     ctx.beginPath();
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
@@ -2140,7 +2619,7 @@ function drawAA() {
     const alpha = 1 - burstPoint.t / burstPoint.maxT;
     const point = worldToScreen(burstPoint);
     ctx.save();
-    ctx.strokeStyle = `rgba(255,74,53,${0.8 * alpha})`;
+    ctx.strokeStyle = "rgba(45,47,46,.55)";
     ctx.beginPath();
     ctx.arc(point.x, point.y, 4 + burstPoint.t * 20, 0, Math.PI * 2);
     ctx.stroke();
@@ -2162,6 +2641,31 @@ function drawSmoke() {
   ctx.restore();
 }
 
+
+function drawDepthCharges() {
+  ctx.save();
+  for (const dc of depthCharges) {
+    if (dc.splashed) continue;
+    const p = worldToScreen(dc);
+    const f = Math.min(1, dc.t / dc.flightTime);
+    const z = Math.sin(f * Math.PI) * 34;
+    ctx.fillStyle = "rgba(35,35,32,.95)";
+    ctx.strokeStyle = "rgba(220,220,200,.75)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y - z, Math.max(2.5, 4 * uiFontScale), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(220,220,200,.28)";
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - z);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawEffects() {
   for (const flash of muzzleFlashes) {
     const point = worldToScreen(flash);
@@ -2169,7 +2673,7 @@ function drawEffects() {
     ctx.save();
     ctx.translate(point.x, point.y);
     ctx.rotate(flash.angle);
-    ctx.fillStyle = `rgba(255,74,53,${alpha})`;
+    ctx.fillStyle = "rgba(45,47,46,.55)";
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.lineTo(20 * alpha, -6 * alpha);
@@ -2239,6 +2743,72 @@ function drawFletcher(context, x, y, heading, scale = 1) {
   context.fillRect(-38, -4.2, 7, 8.4);
 
   for (const turret of turrets) drawTurret(context, turret, guns.bearing - heading, scale);
+  drawAAGuns(context, scale);
+  drawDepthChargeLaunchers(context, scale);
+  context.restore();
+}
+
+
+
+function drawDepthChargeLaunchers(context, scale) {
+  context.save();
+  context.strokeStyle = "#101713";
+  context.fillStyle = "#525b54";
+  context.lineWidth = 0.8 / Math.max(scale, 0.1);
+
+  const launchers = [
+    { x: -52, y: -8.5, a: -0.55 },
+    { x: -52, y: 8.5, a: 0.55 },
+    { x: -64, y: -4.2, a: -0.15 },
+    { x: -64, y: 4.2, a: 0.15 }
+  ];
+
+  for (const l of launchers) {
+    context.save();
+    context.translate(l.x, l.y);
+    context.rotate(l.a);
+    context.fillRect(-3.5, -1.6, 7, 3.2);
+    context.strokeRect(-3.5, -1.6, 7, 3.2);
+    context.beginPath();
+    context.moveTo(0, 0);
+    context.lineTo(-7, 0);
+    context.stroke();
+    context.restore();
+  }
+
+  // stern racks
+  context.fillStyle = "#3d453f";
+  context.fillRect(-70, -5.4, 6, 3);
+  context.fillRect(-70, 2.4, 6, 3);
+  context.strokeRect(-70, -5.4, 6, 3);
+  context.strokeRect(-70, 2.4, 6, 3);
+
+  context.restore();
+}
+
+function drawAAGuns(context, scale) {
+  const gunsAA = [
+    { x: 4, y: -7 }, { x: 4, y: 7 },
+    { x: -8, y: -7 }, { x: -8, y: 7 },
+    { x: -30, y: -7 }, { x: -30, y: 7 },
+    { x: 22, y: -7 }, { x: 22, y: 7 }
+  ];
+  context.save();
+  context.strokeStyle = "#101713";
+  context.fillStyle = "#d7ddd1";
+  context.lineWidth = 0.7 / Math.max(scale, 0.1);
+  for (const g of gunsAA) {
+    context.beginPath();
+    context.arc(g.x, g.y, 1.9, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+    context.beginPath();
+    context.moveTo(g.x, g.y);
+    context.lineTo(g.x + 4, g.y - 1.6);
+    context.moveTo(g.x, g.y);
+    context.lineTo(g.x + 4, g.y + 1.6);
+    context.stroke();
+  }
   context.restore();
 }
 
@@ -2266,22 +2836,27 @@ function drawTurret(context, turret, angle, scale) {
 function drawBoxes() {
   const leftX = 14;
   let leftY = 12;
-  const gap = uiPx(10);
-  const boxW = 190 * uiFontScale;
+  const gap = uiPx(7);
+  const boxW = 220 * uiFontScale;
 
   leftY = drawBox(leftX, leftY, [`POZYCJA`, `X ${Math.round(ship.x)} m`, `Y ${Math.round(ship.y)} m`, `SEKTOR ${Math.floor(ship.x / 10000)}-${Math.floor(ship.y / 10000)}`], boxW) + gap;
 
-  leftY = drawBox(leftX, leftY, lastRadarContact && lastRadarContact.age < 12
-    ? [`${lastRadarContact.name}`, `NAMIAR ${lastRadarContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${lastRadarContact.range} m`, `OD ECHA ${lastRadarContact.age.toFixed(1)} s`, lastRadarContact.predicted || "KURS ? ---"]
-    : [`RADAR CEL`, `BRAK`, `---`, `---`], boxW) + gap;
+  const contacts = detectedContacts.slice(0, 6);
+  if (contacts.length === 0) {
+    leftY = drawBox(leftX, leftY, [`KONTAKTY`, `BRAK WROGICH/NIEZNANYCH`, sonar.on ? `SONAR AKTYWNY` : `SONAR WYŁ.`, radar.on ? `RADAR AKTYWNY` : `RADAR WYŁ.`], boxW) + gap;
+  } else {
+    for (const c of contacts) {
+      const title = c.kind === "sub" ? `SONAR ${c.name}` : c.kind === "air" ? `RADAR LOT ${c.name}` : `RADAR ${c.name}`;
+      leftY = drawBox(leftX, leftY, [
+        title,
+        `NAMIAR ${String(Math.round(c.bearing)).padStart(3, "0")}°  ODL ${Math.round(c.range)}m`,
+        `OD ECHA ${c.age.toFixed(1)}s`,
+        c.predicted || "KURS ? ---"
+      ], boxW) + gap;
+    }
+  }
 
-  leftY = drawBox(leftX, leftY, lastRadarAirContact && lastRadarAirContact.age < 12
-    ? [`${lastRadarAirContact.name}`, `NAMIAR ${lastRadarAirContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${lastRadarAirContact.range} m`, `OD ECHA ${lastRadarAirContact.age.toFixed(1)} s`, lastRadarAirContact.predicted || "KURS ? ---"]
-    : [`RADAR LOT`, aircraftEnabled ? `BRAK` : `WYŁ.`, `---`, `---`], boxW) + gap;
-
-  drawBox(leftX, leftY, lastSonarContact && lastSonarContact.age < 18
-    ? [`${lastSonarContact.name}`, `NAMIAR ${lastSonarContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${lastSonarContact.range} m`, `OD ECHA ${lastSonarContact.age.toFixed(1)} s`, lastSonarContact.predicted || "KURS ? ---"]
-    : [`SONAR KONTAKT`, sonar.on ? `BRAK` : `WYŁ.`, `---`, `---`], boxW);
+  leftY = drawBox(leftX, leftY, [`KONWÓJ`, CONVOY_LABEL, `ZYGZAK ${convoyZigIndex === 0 ? "087" : "093"}°`, `INTERWAŁ 5 MIN`], boxW) + gap;
 
   const rightW = 210 * uiFontScale;
   const rightX = game.width - rightW - 14;
@@ -2305,17 +2880,22 @@ function drawBoxes() {
 
 function drawBox(x, y, lines, width = 190) {
   ctx.save();
-  ctx.font = uiFont(17);
-  const lineH = uiPx(22);
-  const height = uiPx(26) + lines.length * lineH;
+  ctx.font = uiFont(12);
+  const lineH = uiPx(17);
+  const height = uiPx(18) + lines.length * lineH;
   ctx.fillStyle = "rgba(5,8,6,.72)";
   ctx.strokeStyle = "rgba(217,227,211,.42)";
   roundRect(ctx, x, y, width, height, uiPx(8));
   ctx.fill();
   ctx.stroke();
+
   lines.forEach((line, index) => {
     ctx.fillStyle = index ? "#c0cab8" : "#d9e3d3";
-    ctx.fillText(line, x + uiPx(10), y + uiPx(22) + index * lineH);
+    let text = String(line);
+    const maxW = width - uiPx(16);
+    while (ctx.measureText(text).width > maxW && text.length > 4) text = text.slice(0, -2);
+    if (text !== String(line)) text = text.slice(0, -1) + "…";
+    ctx.fillText(text, x + uiPx(8), y + uiPx(17) + index * lineH);
   });
   ctx.restore();
   return y + height;
@@ -2398,6 +2978,7 @@ function drawScope(context, type) {
     context.restore();
 
     if (target.alive) drawScopeDot(context, cx, cy, target, range, r, color);
+    for (const c of convoyShips) if (c.alive) drawScopeDot(context, cx, cy, c, range, r, color);
     if (aircraftEnabled) for (const plane of aircraft) drawScopeCross(context, cx, cy, plane, range, r, color);
   }
 
@@ -2418,7 +2999,7 @@ function drawScopeDot(context, cx, cy, object, range, radius, color) {
   if (d <= range) {
     context.fillStyle = color;
     context.beginPath();
-    context.arc(cx + dx / range * radius, cy + dy / range * radius, 4, 0, Math.PI * 2);
+    context.arc(cx + dx / range * radius, cy + dy / range * radius, 5.5, 0, Math.PI * 2);
     context.fill();
   }
 }
@@ -2453,16 +3034,82 @@ function drawShipPanel() {
 }
 
 
+
+function toggleDcLauncher(name) {
+  if (dcLaunchersSelected.has(name)) dcLaunchersSelected.delete(name);
+  else dcLaunchersSelected.add(name);
+  if (dcLaunchersSelected.size === 0) dcLaunchersSelected.add(name);
+  dcLauncher = [...dcLaunchersSelected][0] || "stern";
+  activeWeapon = "depth";
+  updateDepthChargeButtons();
+}
+
+function handleDepthButton(id) {
+  if (id === "dcLeftMini" || id === "dcLeftBtn") { toggleDcLauncher("left"); return true; }
+  if (id === "dcRightMini" || id === "dcRightBtn") { toggleDcLauncher("right"); return true; }
+  if (id === "dcSternMini" || id === "dcSternBtn") { toggleDcLauncher("stern"); return true; }
+  if (id === "dcShallowMini" || id === "dcShallowBtn") { dcDepth = 30; activeWeapon = "depth"; updateDepthChargeButtons(); return true; }
+  if (id === "dcMediumMini" || id === "dcMediumBtn") { dcDepth = 90; activeWeapon = "depth"; updateDepthChargeButtons(); return true; }
+  if (id === "dcDeepMini" || id === "dcDeepBtn") { dcDepth = 180; activeWeapon = "depth"; updateDepthChargeButtons(); return true; }
+  if (id === "dcDropMini") { activeWeapon = "depth"; dropDepthCharge(); updateDepthChargeButtons(); return true; }
+  return false;
+}
+
 function setActiveWeapon(name) {
   activeWeapon = name;
   lastMessage = name === "guns" ? "Aktywna broń: działa 5”/38." : "Aktywna broń: bomby głębinowe.";
 }
 
 function updateDepthChargeButtons() {
-  for (const btn of [dcLeftBtn, dcRightBtn, dcSternBtn, dcShallowBtn, dcMediumBtn, dcDeepBtn]) btn.classList.remove("active");
-  ({left: dcLeftBtn, right: dcRightBtn, stern: dcSternBtn}[dcLauncher] || dcSternBtn).classList.add("active");
-  ({30: dcShallowBtn, 90: dcMediumBtn, 180: dcDeepBtn}[dcDepth] || dcMediumBtn).classList.add("active");
-  dcRead.textContent = `Aktywna broń: ${activeWeapon === "guns" ? "działa 5”/38" : "bomby głębinowe"} | wyrzutnia: ${dcLauncher === "left" ? "lewa" : dcLauncher === "right" ? "prawa" : "tył"} | głębokość: ${dcDepth} m | zapas: ${resources.depthCharges}`;
+  const all = [dcLeftBtn, dcRightBtn, dcSternBtn, dcShallowBtn, dcMediumBtn, dcDeepBtn,
+    document.getElementById("dcLeftMini"), document.getElementById("dcRightMini"), document.getElementById("dcSternMini"),
+    document.getElementById("dcShallowMini"), document.getElementById("dcMediumMini"), document.getElementById("dcDeepMini")].filter(Boolean);
+  for (const btn of all) btn.classList.remove("active", "on");
+
+  for (const launcher of dcLaunchersSelected) {
+    for (const id of [
+      launcher === "left" ? "dcLeftBtn" : launcher === "right" ? "dcRightBtn" : "dcSternBtn",
+      launcher === "left" ? "dcLeftMini" : launcher === "right" ? "dcRightMini" : "dcSternMini"
+    ]) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add("active", "on");
+    }
+  }
+  for (const id of [
+    dcDepth === 30 ? "dcShallowBtn" : dcDepth === 90 ? "dcMediumBtn" : "dcDeepBtn",
+    dcDepth === 30 ? "dcShallowMini" : dcDepth === 90 ? "dcMediumMini" : "dcDeepMini"
+  ]) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add("active", "on");
+  }
+
+  const names = [...dcLaunchersSelected].map(x => x === "left" ? "lewa" : x === "right" ? "prawa" : "tył").join("+");
+  dcRead.textContent = `Aktywna broń: ${activeWeapon === "guns" ? "działa 5”/38" : "bomby głębinowe"} | wyrzutnie: ${names} | głębokość: ${dcDepth} m | zapas: ${resources.depthCharges}`;
+}
+
+
+function depthChargeLauncherPoints() {
+  const aft = { x: ship.x - Math.cos(ship.heading) * 64, y: ship.y - Math.sin(ship.heading) * 64 };
+  const port = { x: ship.x - Math.cos(ship.heading) * 50 - Math.cos(ship.heading + Math.PI / 2) * 78, y: ship.y - Math.sin(ship.heading) * 50 - Math.sin(ship.heading + Math.PI / 2) * 78 };
+  const star = { x: ship.x - Math.cos(ship.heading) * 50 + Math.cos(ship.heading + Math.PI / 2) * 78, y: ship.y - Math.sin(ship.heading) * 50 + Math.sin(ship.heading + Math.PI / 2) * 78 };
+  return { stern: aft, left: port, right: star };
+}
+
+function launchDepthChargeObject(start, end, depth, delay, index = 0) {
+  depthCharges.push({
+    startX: start.x,
+    startY: start.y,
+    endX: end.x,
+    endY: end.y,
+    x: start.x,
+    y: start.y,
+    t: 0,
+    flightTime: 0.75 + index * 0.08,
+    depth,
+    delay,
+    splashed: false,
+    exploded: false
+  });
 }
 
 function dropDepthCharge() {
@@ -2471,21 +3118,35 @@ function dropDepthCharge() {
     lastMessage = "Brak bomb głębinowych.";
     return;
   }
-  resources.depthCharges -= dcLauncher === "stern" ? 2 : 3;
-  resources.depthCharges = Math.max(0, resources.depthCharges);
 
-  const base = { x: ship.x - Math.cos(ship.heading) * 62, y: ship.y - Math.sin(ship.heading) * 62 };
-  const side = dcLauncher === "left" ? -1 : dcLauncher === "right" ? 1 : 0;
-  const count = dcLauncher === "stern" ? 2 : 3;
-  for (let i = 0; i < count; i++) {
-    const spread = (i - (count - 1) / 2) * 22;
-    const lateral = side * (dcLauncher === "stern" ? 12 : 95);
-    const x = base.x + Math.cos(ship.heading + Math.PI / 2) * (lateral + spread);
-    const y = base.y + Math.sin(ship.heading + Math.PI / 2) * (lateral + spread);
-    splashes.push({ x, y, t: 0, maxT: 2.4, hit: false, depthCharge: true, depth: dcDepth, delay: Math.max(0.7, dcDepth / 28) });
+  const launchers = depthChargeLauncherPoints();
+  const selected = [...dcLaunchersSelected];
+  let used = 0;
+  for (const launcher of selected) {
+    const count = launcher === "stern" ? 2 : 3;
+    if (resources.depthCharges <= 0) break;
+    const actualCount = Math.min(count, resources.depthCharges);
+    resources.depthCharges -= actualCount;
+    used += actualCount;
+
+    const base = launchers[launcher] || launchers.stern;
+    const side = launcher === "left" ? -1 : launcher === "right" ? 1 : 0;
+    const delay = Math.max(0.9, dcDepth / 24);
+
+    for (let i = 0; i < actualCount; i++) {
+      const spread = (i - (actualCount - 1) / 2) * 22;
+      const lateral = side * (launcher === "stern" ? 9 : 105);
+      const aft = launcher === "stern" ? 135 + i * 18 : 70;
+      const end = {
+        x: ship.x - Math.cos(ship.heading) * aft + Math.cos(ship.heading + Math.PI / 2) * (lateral + spread),
+        y: ship.y - Math.sin(ship.heading) * aft + Math.sin(ship.heading + Math.PI / 2) * (lateral + spread)
+      };
+      launchDepthChargeObject(base, end, dcDepth, delay, i);
+    }
   }
-  burst(0.16, 0.12, 180);
-  lastMessage = `Salwa bomb głębinowych: ${dcLauncher === "left" ? "lewa" : dcLauncher === "right" ? "prawa" : "tył"}, ${dcDepth} m.`;
+
+  blip(180, 0.08, 0.12, "square");
+  lastMessage = `Salwa bomb głębinowych: ${used} szt., detonacja ${dcDepth} m.`;
 }
 
 function updateEngineSound() {
@@ -2513,8 +3174,8 @@ function updateEngineSound() {
 function explodeDepthCharge(splash) {
   const p = worldToScreen(splash);
   ctx.save();
-  ctx.strokeStyle = `rgba(210,240,255,${Math.max(0, 1 - splash.t / splash.maxT)})`;
-  ctx.fillStyle = `rgba(210,240,255,${Math.max(0, .20 - splash.t / splash.maxT * .20)})`;
+  ctx.strokeStyle = "rgba(45,47,46,.55)";
+  ctx.fillStyle = "rgba(45,47,46,.55)";
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.arc(p.x, p.y, 18 + splash.t * 34, 0, Math.PI * 2);
@@ -2539,7 +3200,7 @@ function updateResourcePanel() {
 }
 
 function updateTutorialProgress() {
-  if (!tutorialMode || tutorialStep !== 1 || tutorialStep1Complete) return;
+  if (!tutorialMode || tutorialMission !== 2 || tutorialStep !== 0 || tutorialStep1Complete) return;
   if (Math.abs(ship.speed) > 0.6 && Math.abs(ship.rudder) > 4) {
     tutorialStep1Complete = true;
     lastMessage = "Dobrze. Zmieniono prędkość i wychylono ster — możesz przejść dalej.";
@@ -2566,17 +3227,34 @@ function updateUI() {
   dayNightRead.textContent = formatClock();
   updateResourcePanel();
 
-  weaponRead.innerHTML =
-    `TRYB: <span style="color:var(--guns)">${guns.mode}</span><br>` +
-    `KĄT: <span style="color:var(--guns)">${radToCourse(guns.bearing).toFixed(0).padStart(3, "0")}°</span><br>` +
-    `ZASIĘG: <span style="color:var(--guns)">${Math.round(guns.range)} m</span><br>` +
-    `CEL HP: <span style="color:var(--guns)">${target.alive ? Math.round(target.hp) : "---"}</span><br>` +
-    `5”/38: zwykle 2–3 trafienia<br>` +
-    `<button id="autoFireButton" class="tinyButton">${autoFire ? "AUTO OGNIA: WŁ." : "AUTO OGNIA: WYŁ."}</button>`;
+  if (activeWeapon === "guns") {
+    const autoRange = target && target.alive ? Math.round(dist(ship, target)) : "---";
+    weaponRead.innerHTML =
+      `BROŃ: <span style="color:var(--guns)">DZIAŁA 5”/38</span><br>` +
+      `TRYB: <span style="color:var(--guns)">${guns.mode}</span><br>` +
+      `KĄT: <span style="color:var(--guns)">${radToCourse(guns.bearing).toFixed(0).padStart(3, "0")}°</span><br>` +
+      `ZASIĘG NAST.: <span style="color:var(--guns)">${Math.round(guns.range)} m</span><br>` +
+      `ODL. DO CELU: <span style="color:var(--guns)">${autoRange} m</span><br>` +
+      `CEL HP: <span style="color:var(--guns)">${target.alive ? Math.round(target.hp) : "---"}</span><br>` +
+      `<button id="autoFireButton" class="tinyButton">${autoFire ? "AUTO OGNIA: WŁ." : "AUTO OGNIA: WYŁ."}</button>`;
+  } else {
+    weaponRead.innerHTML =
+      `BROŃ: <span style="color:var(--sonar)">BOMBY GŁĘBINOWE</span><br>` +
+      `WYRZUTNIA: <span style="color:var(--sonar)">${dcLauncher === "left" ? "LEWA K-GUN" : dcLauncher === "right" ? "PRAWA K-GUN" : "TYLNE RACKI"}</span><br>` +
+      `<button id="dcLeftMini" class="tinyButton">LEWA</button> <button id="dcRightMini" class="tinyButton">PRAWA</button> <button id="dcSternMini" class="tinyButton">TYŁ</button><br>` +
+      `GŁĘBOKOŚĆ: <span style="color:var(--sonar)">${dcDepth} m</span><br>` +
+      `<button id="dcShallowMini" class="tinyButton">30 m</button> <button id="dcMediumMini" class="tinyButton">90 m</button> <button id="dcDeepMini" class="tinyButton">180 m</button><br>` +
+      `ZAPAS: <span style="color:var(--sonar)">${resources.depthCharges} szt.</span><br>` +
+      `<button id="dcDropMini" class="tinyButton">SALWA</button>`;
+  }
 
   consolePanel.textContent =
-    `Fletcher: max 37 w. | Condor: ${aircraft[0] ? Math.round(aircraft[0].speed * MS_TO_KNOT) : "---"} w. | Radar: obrotowa kreska | Morze: Atlantyk\n` +
-    `Sterowanie: W/S/+/- prędkość, A/D ster, N plan kursu, V auto-trasa, B kasuj punkty, G wpis kurs/kąt, F auto/manual, R reset dział, < > obrót, O/L zasięg, [ ] sonar, Spacja strzał\n` +
+    `KLAWISZE — RUCH: W/S lub +/- maszyny | A/D ster | cyfry + ENTER wpis kurs | N wytycz punkty | B kasuj kurs | V auto-trasa | strzałki przesuwają mapę
+` +
+    `KLAWISZE — WIDOK/SENSORY: kółko myszy zoom | lewy przycisk przeciąga mapę | [ / ] obrót sonaru | guziki INFO/FALE/WIATR przełączają warstwy
+` +
+    `KLAWISZE — BROŃ: 1 działa | 2 bomby głębinowe | SPACJA strzał/salwa | F auto-ogień | G wpis kąta | R reset dział | < > obrót dział | O/L zasięg
+` +
     `${lastMessage} | Auto-trasa: ${navFollowEnabled ? "WŁ." : "WYŁ."}`;
 }
 
@@ -2589,15 +3267,19 @@ function loop(now) {
   updateWeather(dt);
 
   if (gameStarted) {
+    updateArrowPan(simDt);
     updateOrders(simDt);
     updateNavigationPlan();
     updateAutoFire(simDt);
     updatePhysics(simDt);
     updateWakeSmoke(simDt);
     updateTargets(simDt);
+    updateConvoy(simDt);
+    updateCollisions();
     updateSonar(simDt);
     updateRadar(simDt);
     updateProjectiles(simDt);
+    updateDepthCharges(simDt);
   }
 
   draw();

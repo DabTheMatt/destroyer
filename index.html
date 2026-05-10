@@ -7,27 +7,33 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div id="captainModal" class="captainModal">
+    <div class="captainCard">
+      <h2>Podaj swoje imię, kapitanie</h2>
+      <p>Tak będzie zwracać się do Ciebie załoga w tutorialu i komunikatach.</p>
+      <input id="captainModalInput" type="text" maxlength="24" placeholder="Imię lub pseudonim" />
+      <button id="captainModalBtn">WEJDŹ NA POKŁAD</button>
+    </div>
+  </div>
+
   <main id="gameWrap">
     <div id="startMenu" class="startMenu">
+      <div class="menuFooter">Uboat Destroyers, Maciej Dąbrowski, 2026, v. 0.39</div>
       <div class="menuShade"></div>
       <section class="menuPanel">
-        <div class="gameTitle">U-BOOTY<br><span>i NISZCZYCIELE</span></div>
-        <div class="titleInfo leftInfo"><div class="titleInfoHeader">USS FLETCHER</div><div>Prędkość: 37 w.</div><div>Uzbrojenie: 5 × 5”/38</div><div>Radar + sonar QC</div></div>
-        <div class="titleInfo rightInfo"><div class="titleInfoHeader">ATLANTYK 1943</div><div>Eskorta konwoju</div><div>Kontakty nawodne i podwodne</div><div>Radar z obrotową kreską</div></div>
-        <button id="resumeGameBtn" class="mainMenuButton primary hidden">↩ POWRÓĆ DO GRY</button>
+        <button id="resumeGameBtn" class="hidden mainMenuButton primary">↩ POWRÓĆ DO GRY</button>
         <button id="newGameBtn" class="mainMenuButton">▶ NOWA GRA</button>
         <button id="tutorialBtn" class="mainMenuButton">▣ TUTORIAL</button>
         <button id="optionsBtn" class="mainMenuButton">⚙ OPCJE</button>
         <button id="exitBtn" class="mainMenuButton">▣ ZAKOŃCZ GRĘ</button>
-        <div id="tutorialPanel" class="tutorialPanel hidden">
+
+<div id="tutorialPanel" class="tutorialPanel hidden">
           <label class="captainNameLabel">IMIĘ / PSEUDONIM KAPITANA</label>
           <input id="captainNameInput" class="captainNameInput" type="text" placeholder="np. Nowak, Anna, Wilk" maxlength="24" />
-          <div class="tutorialTitle">MISJE TRENINGOWE</div>
-          <button id="trainingMission1Btn" class="trainingMissionBtn">1. Sterowanie okrętem</button>
-          <button class="trainingMissionBtn disabled">2. Nawigacja po punktach</button>
-          <button class="trainingMissionBtn disabled">3. Radar i identyfikacja kontaktów</button>
-          <button class="trainingMissionBtn disabled">4. Sonar i U-Booty</button>
-          <button class="trainingMissionBtn disabled">5. Ogień artyleryjski i bomby głębinowe</button>
+          <div class="tutorialTitle">TUTORIAL</div>
+          <button id="trainingMission1Btn" class="trainingMissionBtn">1. Mapa i oznaczenia</button>
+          <button id="trainingMission2Btn" class="trainingMissionBtn">2. Sterowanie okrętem</button>
+          <button id="trainingMission3Btn" class="trainingMissionBtn">3. Obsługa broni</button>
         </div>
 
         <div id="optionsPanel" class="optionsPanel hidden">
@@ -36,16 +42,11 @@
           <div class="optionChecks">
             <label><input id="weatherToggle" type="checkbox" checked /> POGODA: WŁ.</label>
             <label><input id="aircraftToggle" type="checkbox" checked /> SAMOLOTY: WŁ.</label>
-          </div>
-        </div>
-      </section>
+          </div></section>
     </div>
     <div id="mapMenuBar" class="mapMenuBar">
       <button id="menuBtn" class="mapButtonBar">MENU</button>
       <button id="shipResourceBtn" class="mapButtonBar">FLETCHER</button>
-      <button id="windBtn" class="mapButtonBar on">WIATR: WŁ.</button>
-      <button id="infoBtn" class="mapButtonBar on">INFO: WŁ.</button>
-      <button id="seaBtn" class="mapButtonBar on">FALE: WŁ.</button>
     </div>
     <div id="timeControls" class="timeControls">
       <span id="dayNightRead">DZIEŃ 12:00</span>
@@ -104,6 +105,12 @@
         </div>
       </div>
     </div>
+    <div id="mapToggleCluster" class="mapToggleCluster">
+      <button id="infoBtn" class="mapButtonBar on">INFO: WŁ.</button>
+      <button id="seaBtn" class="mapButtonBar on">FALE: WŁ.</button>
+      <button id="windBtn" class="mapButtonBar on">WIATR: WŁ.</button>
+    </div>
+
     <div id="tutorialPrompt" class="tutorialPrompt hidden">
       <div id="tutorialText" class="tutorialText"></div>
       <div class="tutorialActions">

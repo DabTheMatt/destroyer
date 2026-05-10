@@ -860,3 +860,415 @@ body.menuOpen .startMenu{position:fixed;inset:0;z-index:1000}
     bottom: 88px !important;
   }
 }
+
+/* v31: force map toggles to actual right-bottom corner */
+#mapMenuBar {
+  pointer-events: none !important;
+}
+#mapMenuBar #menuBtn,
+#mapMenuBar #shipResourceBtn {
+  pointer-events: auto !important;
+}
+#mapMenuBar #windBtn,
+#mapMenuBar #infoBtn,
+#mapMenuBar #seaBtn {
+  position: fixed !important;
+  left: auto !important;
+  right: 178px !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  width: 126px !important;
+  min-width: 126px !important;
+  z-index: 500 !important;
+}
+#mapMenuBar #windBtn { bottom: 96px !important; top: auto !important; }
+#mapMenuBar #infoBtn { bottom: 58px !important; top: auto !important; }
+#mapMenuBar #seaBtn  { bottom: 20px !important; top: auto !important; }
+
+@media (max-width: 1000px) {
+  #mapMenuBar #windBtn,
+  #mapMenuBar #infoBtn,
+  #mapMenuBar #seaBtn {
+    right: 16px !important;
+  }
+}
+
+/* v32: independent right-bottom map controls */
+.mapToggleCluster {
+  position: fixed !important;
+  right: 16px !important;
+  bottom: 16px !important;
+  z-index: 900 !important;
+  display: grid !important;
+  grid-template-columns: 126px !important;
+  gap: 7px !important;
+  pointer-events: auto !important;
+}
+.mapToggleCluster .mapButtonBar {
+  position: static !important;
+  left: auto !important;
+  right: auto !important;
+  top: auto !important;
+  bottom: auto !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 126px !important;
+  min-width: 126px !important;
+  text-align: center !important;
+  transform: none !important;
+  pointer-events: auto !important;
+}
+.startMenu:not(.hidden) ~ .mapToggleCluster {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* neutralize old rules */
+#mapMenuBar #windBtn,
+#mapMenuBar #infoBtn,
+#mapMenuBar #seaBtn {
+  all: unset;
+}
+
+/* v33: map toggles anchored to map, not screen */
+.mapToggleCluster {
+  position: absolute !important;
+  right: 14px !important;
+  bottom: 14px !important;
+  z-index: 90 !important;
+  display: grid !important;
+  grid-template-columns: 126px !important;
+  gap: 7px !important;
+  pointer-events: auto !important;
+}
+#gameWrap { position: relative !important; cursor: default !important; }
+#game { cursor: default !important; }
+body, button, canvas { cursor: default; }
+body.dragging, body.dragging * { cursor: grabbing !important; }
+body.aiming #game { cursor: crosshair !important; }
+
+#gameWrap .mapToggleCluster .mapButtonBar {
+  position: static !important;
+  left: auto !important;
+  right: auto !important;
+  top: auto !important;
+  bottom: auto !important;
+  display: block !important;
+  width: 126px !important;
+  min-width: 126px !important;
+  transform: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* v34 captain modal, compact controls, sonar/flight additions */
+.captainModal {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, rgba(28,58,70,.92), rgba(0,0,0,.96));
+  color: #d9e3d3;
+  font-family: "Courier New", monospace;
+}
+.captainModal.hidden { display: none; }
+.captainCard {
+  width: min(460px, calc(100% - 36px));
+  border: 1px solid rgba(217,227,211,.45);
+  border-radius: 14px;
+  background: rgba(5,8,6,.88);
+  box-shadow: 0 18px 50px rgba(0,0,0,.75);
+  padding: 22px;
+}
+.captainCard h2 {
+  margin: 0 0 10px;
+  color: #9fd0ef;
+  font-size: 22px;
+}
+.captainCard p { line-height: 1.45; }
+#captainModalInput {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0b171c;
+  border: 1px solid #405667;
+  border-radius: 9px;
+  color: #d9e3d3;
+  font-family: "Courier New", monospace;
+  font-size: 18px;
+  padding: 10px 12px;
+  margin: 10px 0 14px;
+}
+#captainModalBtn {
+  width: 100%;
+  background: linear-gradient(180deg, rgba(35,75,104,.95), rgba(11,30,45,.95));
+  border: 1px solid #7aa6c5;
+  color: #d9e3d3;
+  border-radius: 9px;
+  font-family: "Courier New", monospace;
+  font-size: 17px;
+  font-weight: 900;
+  padding: 11px;
+  cursor: pointer;
+}
+
+/* mniejsze guziki mapy i kolejność INFO / FALE / WIATR */
+.mapToggleCluster {
+  grid-template-columns: 96px !important;
+  gap: 5px !important;
+}
+.mapToggleCluster .mapButtonBar {
+  width: 96px !important;
+  min-width: 96px !important;
+  min-height: 24px !important;
+  font-size: calc(10px * var(--ui-scale)) !important;
+  padding: 4px 6px !important;
+}
+#gameWrap .mapToggleCluster #infoBtn { order: 1; }
+#gameWrap .mapToggleCluster #seaBtn { order: 2; }
+#gameWrap .mapToggleCluster #windBtn { order: 3; }
+
+#speedRead, #rudderRead, #courseRead, #windShort {
+  font-size: calc(11px * var(--ui-scale)) !important;
+}
+
+/* v35 menu background */
+.startMenu{background:#071923 url("background1.png") center/cover no-repeat !important;}
+
+/* v36: przesunięcie sterowania mapą w lewo, żeby nie wychodziło poza mapę */
+.mapToggleCluster {
+  right: 128px !important;
+  bottom: 14px !important;
+}
+#gameWrap .mapToggleCluster {
+  right: 128px !important;
+  bottom: 14px !important;
+}
+
+/* v37: map toggles aligned with weather box map margin */
+.mapToggleCluster {
+  right: 14px !important;
+  bottom: 14px !important;
+  z-index: 95 !important;
+}
+#gameWrap .mapToggleCluster {
+  right: 14px !important;
+  bottom: 14px !important;
+}
+.mapToggleCluster .mapButtonBar {
+  width: 96px !important;
+  min-width: 96px !important;
+  font-size: calc(10px * var(--ui-scale)) !important;
+}
+
+/* v38 menu redesign */
+.startMenu {
+  background: #071923 url("menu_b.jpeg") left center / cover no-repeat !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  padding-left: clamp(28px, 4vw, 58px) !important;
+}
+.menuShade {
+  background:
+    linear-gradient(90deg, rgba(0,0,0,.54), rgba(0,0,0,.15) 44%, rgba(0,0,0,.04) 100%) !important;
+}
+.menuPanel {
+  width: min(420px, 40vw) !important;
+  gap: 18px !important;
+}
+.gameTitle {
+  color: #f0d08a !important;
+  text-shadow: 0 2px 0 #120b04, 0 0 22px rgba(0,0,0,.85) !important;
+  letter-spacing: 2px !important;
+}
+.mainMenuButton {
+  min-height: 62px !important;
+  border: 1px solid rgba(230,190,110,.82) !important;
+  border-radius: 13px !important;
+  background:
+    linear-gradient(180deg, rgba(18,22,22,.88), rgba(5,8,8,.86)),
+    radial-gradient(circle at 20% 20%, rgba(230,190,110,.18), rgba(0,0,0,0)) !important;
+  color: #e6c477 !important;
+  font-family: Georgia, "Times New Roman", serif !important;
+  font-size: calc(22px * var(--ui-scale)) !important;
+  font-weight: 600 !important;
+  letter-spacing: .5px !important;
+  padding: 0 24px !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,235,170,.10),
+    0 5px 16px rgba(0,0,0,.55) !important;
+}
+.mainMenuButton:hover,
+.mainMenuButton.primary {
+  color: #ffe2a0 !important;
+  border-color: #f3cd7d !important;
+  background:
+    linear-gradient(180deg, rgba(30,34,32,.94), rgba(9,12,12,.92)),
+    radial-gradient(circle at 20% 20%, rgba(230,190,110,.26), rgba(0,0,0,0)) !important;
+  transform: translateX(3px);
+}
+.titleInfo.rightInfo {
+  display: none !important;
+}
+.menuFooter {
+  position: fixed;
+  left: clamp(22px, 3vw, 52px);
+  bottom: 18px;
+  color: rgba(230,196,120,.88);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: calc(12px * var(--ui-scale));
+  letter-spacing: .2px;
+  text-shadow: 0 2px 8px rgba(0,0,0,.75);
+}
+.tutorialPanel,
+.optionsPanel {
+  background: rgba(5,7,7,.82) !important;
+  border-color: rgba(230,190,110,.55) !important;
+}
+
+/* v39 clean main menu: only buttons + footer */
+.startMenu {
+  background: #071923 url("menu_b.jpeg") left center / cover no-repeat !important;
+  align-items: flex-start !important;
+  justify-content: flex-end !important;
+  padding: clamp(22px, 3vw, 42px) clamp(24px, 4vw, 64px) !important;
+}
+.menuShade {
+  background: linear-gradient(90deg, rgba(0,0,0,.08), rgba(0,0,0,.12) 48%, rgba(0,0,0,.58) 100%) !important;
+}
+.menuPanel {
+  position: relative !important;
+  width: min(360px, 36vw) !important;
+  margin: 0 !important;
+  padding-top: 0 !important;
+  gap: 12px !important;
+  align-self: flex-start !important;
+}
+.gameTitle,
+.titleInfo,
+.leftInfo,
+.rightInfo {
+  display: none !important;
+}
+.mainMenuButton {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  min-height: 52px !important;
+  width: 100% !important;
+  border: 1px solid rgba(230,190,110,.82) !important;
+  border-radius: 12px !important;
+  background:
+    linear-gradient(180deg, rgba(18,22,22,.88), rgba(5,8,8,.86)),
+    radial-gradient(circle at 20% 20%, rgba(230,190,110,.18), rgba(0,0,0,0)) !important;
+  color: #e6c477 !important;
+  font-family: Georgia, "Times New Roman", serif !important;
+  font-size: calc(18px * var(--ui-scale)) !important;
+  font-weight: 600 !important;
+  text-align: left !important;
+  padding: 0 22px !important;
+}
+.mainMenuButton.hidden {
+  display: none !important;
+}
+.menuFooter {
+  position: fixed !important;
+  left: 22px !important;
+  bottom: 14px !important;
+  z-index: 2200 !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: rgba(230,196,120,.98) !important;
+  font-family: Georgia, "Times New Roman", serif !important;
+  font-size: 12px !important;
+  letter-spacing: .2px !important;
+  text-shadow: 0 2px 8px rgba(0,0,0,.85) !important;
+  pointer-events: none !important;
+}
+.tutorialPanel,
+.optionsPanel {
+  max-height: 44vh !important;
+  overflow: auto !important;
+}
+
+/* v40: force real menu buttons, hide leftover ship info */
+.startMenu .menuPanel {
+  position: fixed !important;
+  top: 28px !important;
+  right: 42px !important;
+  left: auto !important;
+  bottom: auto !important;
+  width: 360px !important;
+  max-width: calc(100vw - 84px) !important;
+  z-index: 2300 !important;
+  display: grid !important;
+  gap: 12px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.startMenu .menuPanel > .mainMenuButton {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  z-index: 2301 !important;
+}
+.startMenu .titleInfo,
+.startMenu .leftInfo,
+.startMenu .rightInfo,
+.startMenu .shipInfo,
+.startMenu .menuStats,
+.startMenu .fletcherInfo {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+.startMenu .menuPanel::before,
+.startMenu .menuPanel::after {
+  content: none !important;
+}
+
+/* v42: resume button only after actual game start */
+body:not(.hasStartedGame) #resumeGameBtn {
+  display: none !important;
+}
+
+/* v43: map toggles aligned inside map like weather box, not clipped */
+#gameWrap .mapToggleCluster {
+  position: absolute !important;
+  right: 14px !important;
+  bottom: 14px !important;
+  width: 96px !important;
+  z-index: 120 !important;
+}
+#gameWrap .mapToggleCluster .mapButtonBar {
+  width: 96px !important;
+  min-width: 96px !important;
+  box-sizing: border-box !important;
+}
+
+/* v48 active weapon/depth buttons */
+.tinyButton.active, .tinyButton.on,
+.depthButton.active, .depthButton.on,
+button.active, button.on {
+  border-color: #9cff86 !important;
+  color: #d8ffd0 !important;
+  background: rgba(50,105,45,.82) !important;
+  box-shadow: 0 0 10px rgba(120,255,100,.35) !important;
+}
+
+/* v49 active toggle buttons */
+.tinyButton.active, .tinyButton.on,
+.depthButton.active, .depthButton.on,
+button.active, button.on {
+  border-color: #9cff86 !important;
+  color: #d8ffd0 !important;
+  background: rgba(50,105,45,.82) !important;
+  box-shadow: 0 0 10px rgba(120,255,100,.35) !important;
+}
