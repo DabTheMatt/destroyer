@@ -3,45 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>U-Booty i Niszczyciele — v6</title>
+  <title>U-Booty i Niszczyciele — v11</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <main id="gameWrap">
-    <button id="windLayerButton" class="mapButton on">WIATR: WŁ.</button>
-    <button id="aimInfoButton" class="mapButton info on">INFO: WŁ.</button>
+    <button id="radarBtn" class="mapButton left on">RADAR: WŁ.</button>
+    <button id="windBtn" class="mapButton on">WIATR: WŁ.</button>
+    <button id="infoBtn" class="mapButton right on">INFO: WŁ.</button>
     <canvas id="game"></canvas>
   </main>
 
   <aside>
     <section class="panel">
-      <div class="panelTitle">
-        <span>SONAR</span>
-        <button id="sonarButton" class="tinyButton">WŁĄCZ</button>
-        <span id="sonarStatus" class="statusOff">WYŁ.</span>
-      </div>
+      <div class="panelTitle"><span>SONAR</span><button id="sonarButton" class="tinyButton">WŁĄCZ</button><span id="sonarStatus" class="statusOff">WYŁ.</span></div>
       <canvas id="sonar" class="scopeCanvas"></canvas>
     </section>
-
     <section class="panel">
-      <div class="panelTitle"><span>RADAR</span><button id="radarButton" class="tinyButton">WYŁĄCZ</button><span id="radarStatus" class="statusOn">WŁ.</span></div>
+      <div class="panelTitle"><span>RADAR</span><span id="radarStatus" class="statusOn">WŁ.</span></div>
       <canvas id="radar" class="scopeCanvas"></canvas>
     </section>
-
     <section class="panel">
       <div class="panelTitle"><span>NISZCZYCIEL / FLETCHER</span><span id="windShort">WIATR</span></div>
       <canvas id="shipView"></canvas>
     </section>
-
     <section class="miniControls">
       <div class="controlCard">PRĘDKOŚĆ<div id="speedRead" class="bigVal">STOP</div></div>
       <div class="controlCard">STER<div id="rudderRead" class="bigVal">0°</div></div>
       <div class="controlCard">KURS<div id="courseRead" class="bigVal">000°</div></div>
     </section>
-
     <section class="weaponControls" id="weaponRead"></section>
   </aside>
-
   <div id="console"></div>
   <script src="game.js"></script>
 </body>

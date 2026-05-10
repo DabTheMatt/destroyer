@@ -1,13 +1,20 @@
-# U-Booty i Niszczyciele — v10
+# U-Booty i Niszczyciele — v11
 
 Zmiany:
-- radar ma przycisk WŁ./WYŁ.,
-- klawisze + i - dublują W/S dla telegrafu maszynowego,
-- R resetuje działa do pozycji początkowej,
-- działa 5”/38 obracają się z prędkością Mk 30 około 28,75°/s,
-- każde z pięciu dział ma własną pozycję, sektor ostrzału, reload i losowe opóźnienie strzału,
-- działa dziobowe nie strzelają przez rufę,
-- samoloty Condor spawnują z różnych krawędzi i lecą w okolice okrętu,
-- wykryte cele mają osobne, klikalne okna informacyjne,
-- kliknięcie w okno kontaktu centruje kamerę na celu,
-- sonar ma mocniejszy gradient stożka.
+- morze w ciemniejszej, bardziej atlantyckiej palecie,
+- Fletcher: skala prędkości ustawiona na ok. 37 w maks.,
+- Fw 200 Condor: prędkości w grze w zakresie ok. 167–190 w, czyli blisko przelotowych wartości historycznych,
+- fale rysowane jako krótkie segmenty, bez obrysów przypominających okręty,
+- czerwone pociski i smugi AA,
+- prosty model uszkodzeń:
+  - frachtowiec: 100 HP, zwykle 2–3 trafienia 5”/38,
+  - Condor: 24 HP, zwykle 2–4 skuteczne trafienia/serie 40 mm,
+- bardzo duży maksymalny zoom,
+- radar na mapie: obracająca się kreska zamiast rozchodzących się kręgów,
+- echo radarowe pojawia się, gdy kreska przechodzi przez kontakt.
+
+Pliki w paczce:
+- index.html
+- style.css
+- game.js
+- README.md
