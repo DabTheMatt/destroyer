@@ -16,15 +16,47 @@ const sonarButton = document.getElementById("sonarButton");
 const sonarStatus = document.getElementById("sonarStatus");
 const radarStatus = document.getElementById("radarStatus");
 const radarButton = document.getElementById("radarButton");
+const menuBtn = document.getElementById("menuBtn");
 const startMenu = document.getElementById("startMenu");
+const resumeGameBtn = document.getElementById("resumeGameBtn");
 const newGameBtn = document.getElementById("newGameBtn");
 const optionsBtn = document.getElementById("optionsBtn");
 const exitBtn = document.getElementById("exitBtn");
 const optionsPanel = document.getElementById("optionsPanel");
 const fontScaleSlider = document.getElementById("fontScaleSlider");
 const fontScaleValue = document.getElementById("fontScaleValue");
+const weatherToggle = document.getElementById("weatherToggle");
+const aircraftToggle = document.getElementById("aircraftToggle");
+const tutorialBtn = document.getElementById("tutorialBtn");
+const tutorialPanel = document.getElementById("tutorialPanel");
+const trainingMission1Btn = document.getElementById("trainingMission1Btn");
+const captainNameInput = document.getElementById("captainNameInput");
+const tutorialPrompt = document.getElementById("tutorialPrompt");
+const tutorialText = document.getElementById("tutorialText");
+const tutorialPrevBtn = document.getElementById("tutorialPrevBtn");
+const tutorialNextBtn = document.getElementById("tutorialNextBtn");
+const tutorialCloseBtn = document.getElementById("tutorialCloseBtn");
+const shipResourceBtn = document.getElementById("shipResourceBtn");
+const resourcePanel = document.getElementById("resourcePanel");
+const closeResourceBtn = document.getElementById("closeResourceBtn");
+const resourceRead = document.getElementById("resourceRead");
+const dayNightRead = document.getElementById("dayNightRead");
+const pauseTimeBtn = document.getElementById("pauseTimeBtn");
+const timeHalfBtn = document.getElementById("timeHalfBtn");
+const time1Btn = document.getElementById("time1Btn");
+const time2Btn = document.getElementById("time2Btn");
+const time4Btn = document.getElementById("time4Btn");
+const time10Btn = document.getElementById("time10Btn");
+const dcLeftBtn = document.getElementById("dcLeftBtn");
+const dcRightBtn = document.getElementById("dcRightBtn");
+const dcSternBtn = document.getElementById("dcSternBtn");
+const dcShallowBtn = document.getElementById("dcShallowBtn");
+const dcMediumBtn = document.getElementById("dcMediumBtn");
+const dcDeepBtn = document.getElementById("dcDeepBtn");
+const dcRead = document.getElementById("dcRead");
 const windBtn = document.getElementById("windBtn");
 const infoBtn = document.getElementById("infoBtn");
+const seaBtn = document.getElementById("seaBtn");
 const speedRead = document.getElementById("speedRead");
 const rudderRead = document.getElementById("rudderRead");
 const courseRead = document.getElementById("courseRead");
@@ -36,12 +68,13 @@ const WORLD_H = 30000;
 const KNOT_TO_MS = 0.514444;
 const MS_TO_KNOT = 1 / KNOT_TO_MS;
 const SIM_SPEED = 10;
+const AA_RANGE = 3810;
 
 let baseMetersPerPixel = 42;
 let metersPerPixel = 42;
 let zoom = 1.0;
 const MIN_ZOOM = 0.35;
-const MAX_ZOOM = 120.0;
+const MAX_ZOOM = 420.0;
 
 const keys = new Set();
 const handled = new Set();
@@ -74,6 +107,7 @@ const camera = { x: 0, y: 0, anchorX: 0.5, anchorY: 0.5, manualOffsetX: 0, manua
 
 const sonar = { on: false, range: 2500, minRange: 300, bearing: degToRad(0), beamWidth: degToRad(14), ping: 0 };
 const radar = { on: true, range: 9500, sweepAngle: 0 };
+const HORIZON_RANGE = 20000;
 
 const weather = {
   t: 0,
@@ -81,7 +115,20 @@ const weather = {
   wave: 0.34,
   windDir: degToRad(305),
   windSpeed: 14.5,
-  visibility: 5200
+  visibility: 5200,
+  changeTimer: 0,
+  targetWindDir: degToRad(305),
+  targetWindSpeed: 14.5,
+  targetRain: 0.28,
+  targetWave: 0.34
+};
+
+const forecast = {
+  rain: 0.35,
+  wave: 0.38,
+  windDir: degToRad(292),
+  windSpeed: 12.5,
+  visibility: 5400
 };
 
 const guns = {
@@ -102,17 +149,42 @@ const turrets = [
   { name: "Y", x: -55, y: 0, arc: [30, 330], reload: 2.8, baseReload: 4.1 }
 ];
 
+let nextSurfaceContactId = 1;
+let nextSubContactId = 1;
 let target = randomTarget();
 let lastRadarContact = null;
 let lastRadarAirContact = null;
+let lastSonarContact = null;
 let inputMode = "COURSE";
 let courseInput = "";
 let angleInput = "";
 let lastMessage = "Gotowy.";
 let windLayerOn = true;
 let infoOn = true;
+let seaLayerOn = true;
 let gameStarted = false;
 let autoFire = false;
+let uiFontScale = 1.0;
+let weatherEnabled = true;
+let aircraftEnabled = true;
+let gameClock = 12 * 3600;
+let timeCompression = 1;
+let lastWatchName = null;
+let tutorialMode = false;
+let tutorialStep = 0;
+let tutorialStep1Complete = false;
+let captainName = "Kapitanie";
+let resources = { fuel:100, ammo5:520, ammoAA:2400, depthCharges:42, crewFatigue:8, engineWear:6, morale:86 };
+let activeWeapon = "guns";
+let dcLauncher = "stern";
+let dcDepth = 90;
+let engineOsc = null;
+let engineGain = null;
+let contactTrackSeq = 1;
+let navPlanningMode = false;
+let navFollowEnabled = true;
+let navHardTurn = false;
+const navWaypoints = [];
 let audioCtx = null;
 let lastTime = performance.now();
 let wakeBuild = 0;
@@ -133,6 +205,11 @@ const rainDrops = Array.from({ length: 130 }, () => ({ x: Math.random(), y: Math
 const drag = { active: false, lastX: 0, lastY: 0 };
 
 resizeAll();
+uiFontScale = 1.5;
+fontScaleSlider.value = "150";
+fontScaleValue.textContent = "150%";
+document.documentElement.style.setProperty("--ui-scale", "1.5");
+document.body.classList.add("menuOpen");
 bindEvents();
 requestAnimationFrame(loop);
 
@@ -151,13 +228,73 @@ function bindEvents() {
   });
 
   newGameBtn.addEventListener("click", () => {
+    resetGameState();
+    startMenu.classList.add("hidden");
+    document.body.classList.remove("menuOpen");
+    resumeGameBtn.classList.remove("hidden");
+    gameStarted = true;
+    lastMessage = "Nowa gra rozpoczęta.";
+  });
+
+  resumeGameBtn.addEventListener("click", () => {
+    startMenu.classList.add("hidden");
+    document.body.classList.remove("menuOpen");
+    gameStarted = true;
+    lastMessage = "Powrót do gry.";
+  });
+
+  menuBtn.addEventListener("click", () => toggleGameMenu());
+
+  radarButton.addEventListener("click", () => {
+    radar.on = !radar.on;
+    radarButton.textContent = radar.on ? "WYŁĄCZ" : "WŁĄCZ";
+  });
+
+  newGameBtn.addEventListener("click", () => {
     startMenu.classList.add("hidden");
     gameStarted = true;
     lastMessage = "Nowa gra rozpoczęta.";
   });
 
+  
+  tutorialBtn.addEventListener("click", () => {
+    tutorialPanel.classList.toggle("hidden");
+    optionsPanel.classList.add("hidden");
+  });
+
+  trainingMission1Btn.addEventListener("click", () => {
+    startTutorialMission1();
+  });
+
+  tutorialNextBtn.addEventListener("click", () => {
+    if (tutorialStep >= tutorialSteps.length - 1) {
+      tutorialPrompt.classList.add("hidden");
+      tutorialMode = false;
+      return;
+    }
+    tutorialStep += 1;
+    showTutorialStep();
+  });
+
+  tutorialPrevBtn.addEventListener("click", () => {
+    tutorialStep -= 1;
+    showTutorialStep();
+  });
+
+  tutorialCloseBtn.addEventListener("click", () => {
+    tutorialPrompt.classList.add("hidden");
+    tutorialMode = false;
+  });
+
   optionsBtn.addEventListener("click", () => {
     optionsPanel.classList.toggle("hidden");
+    tutorialPanel.classList.add("hidden");
+  });
+
+  menuBtn.addEventListener("click", () => {
+    gameStarted = false;
+    startMenu.classList.remove("hidden");
+    lastMessage = "Powrót do menu.";
   });
 
   exitBtn.addEventListener("click", () => {
@@ -167,9 +304,38 @@ function bindEvents() {
 
   fontScaleSlider.addEventListener("input", () => {
     const value = Number(fontScaleSlider.value);
-    document.documentElement.style.setProperty("--ui-scale", String(value / 100));
+    uiFontScale = value / 100;
+    document.documentElement.style.setProperty("--ui-scale", String(uiFontScale));
     fontScaleValue.textContent = `${value}%`;
   });
+
+  weatherToggle.addEventListener("change", () => {
+    weatherEnabled = weatherToggle.checked;
+    lastMessage = weatherEnabled ? "Pogoda włączona." : "Pogoda wyłączona.";
+  });
+
+  aircraftToggle.addEventListener("change", () => {
+    aircraftEnabled = aircraftToggle.checked;
+    lastMessage = aircraftEnabled ? "Samoloty włączone." : "Samoloty wyłączone.";
+  });
+  shipResourceBtn.addEventListener("click", () => resourcePanel.classList.toggle("hidden"));
+  closeResourceBtn.addEventListener("click", () => resourcePanel.classList.add("hidden"));
+  pauseTimeBtn.addEventListener("click", () => setTimeCompression(0));
+  timeHalfBtn.addEventListener("click", () => setTimeCompression(0.5));
+  time1Btn.addEventListener("click", () => setTimeCompression(1));
+  time2Btn.addEventListener("click", () => setTimeCompression(2));
+  time4Btn.addEventListener("click", () => setTimeCompression(4));
+  time10Btn.addEventListener("click", () => setTimeCompression(10));
+  setTimeCompression(1);
+
+  dcLeftBtn.addEventListener("click", () => { dcLauncher = "left"; activeWeapon = "depth"; updateDepthChargeButtons(); });
+  dcRightBtn.addEventListener("click", () => { dcLauncher = "right"; activeWeapon = "depth"; updateDepthChargeButtons(); });
+  dcSternBtn.addEventListener("click", () => { dcLauncher = "stern"; activeWeapon = "depth"; updateDepthChargeButtons(); });
+  dcShallowBtn.addEventListener("click", () => { dcDepth = 30; activeWeapon = "depth"; updateDepthChargeButtons(); });
+  dcMediumBtn.addEventListener("click", () => { dcDepth = 90; activeWeapon = "depth"; updateDepthChargeButtons(); });
+  dcDeepBtn.addEventListener("click", () => { dcDepth = 180; activeWeapon = "depth"; updateDepthChargeButtons(); });
+  updateDepthChargeButtons();
+
 
   windBtn.addEventListener("click", () => {
     windLayerOn = !windLayerOn;
@@ -181,6 +347,12 @@ function bindEvents() {
     infoOn = !infoOn;
     infoBtn.textContent = infoOn ? "INFO: WŁ." : "INFO: WYŁ.";
     infoBtn.classList.toggle("on", infoOn);
+  });
+
+  seaBtn.addEventListener("click", () => {
+    seaLayerOn = !seaLayerOn;
+    seaBtn.textContent = seaLayerOn ? "FALE: WŁ." : "FALE: WYŁ.";
+    seaBtn.classList.toggle("on", seaLayerOn);
   });
 
   game.addEventListener("wheel", (event) => {
@@ -229,6 +401,32 @@ function bindEvents() {
     camera.manualOffsetY = 0;
   });
 
+  game.addEventListener("click", (event) => {
+    const rect = game.getBoundingClientRect();
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const sx = (event.clientX - rect.left) * dpr;
+    const sy = (event.clientY - rect.top) * dpr;
+    const world = { x: camera.x + sx * metersPerPixel, y: camera.y + sy * metersPerPixel };
+    if (!navPlanningMode && gameStarted) {
+      const clicked = nearestClickableContact(world);
+      if (clicked) {
+        centerCameraOn(clicked);
+        lastMessage = `Widok wycentrowany na kontakcie ${contactDisplayName(clicked, clicked.trackKind || "surface", true)}.`;
+      }
+      return;
+    }
+    if (!navPlanningMode || !gameStarted) return;
+    if (navWaypoints.length >= 5) {
+      lastMessage = "Plan może mieć maksymalnie 5 punktów. Naciśnij B, aby skasować.";
+      return;
+    }
+    navWaypoints.push({
+      x: world.x,
+      y: world.y
+    });
+    lastMessage = `Dodano punkt kursu ${navWaypoints.length}/5.`;
+  });
+
   weaponRead.addEventListener("click", (event) => {
     if (event.target && event.target.id === "autoFireButton") {
       autoFire = !autoFire;
@@ -245,8 +443,168 @@ function bindEvents() {
   });
 }
 
+
+
+function captainAddress() {
+  const raw = (captainNameInput && captainNameInput.value ? captainNameInput.value.trim() : "") || captainName || "";
+  return raw ? `kapitanie ${raw}` : "kapitanie";
+}
+
+function getTutorialSteps() {
+  const cap = captainAddress();
+  return [
+    `Witaj, ${cap}, na pokładzie niszczyciela klasy Fletcher. Fletcher był jednym z najważniejszych amerykańskich niszczycieli II wojny światowej: szybki, zwrotny, z silnym uzbrojeniem artyleryjskim i przeciwlotniczym. Okręty tej klasy służyły na Atlantyku i Pacyfiku, eskortowały konwoje, osłaniały lotniskowce i polowały na okręty podwodne. Marynarze cenili je za szybkość, dzielność morską i solidność, choć służba na nich była ciasna, mokra i wyczerpująca. Dziś poznasz podstawy dowodzenia takim okrętem.`,
+    `Zaczniemy od najprostszych rzeczy, ${cap}. Klawisze W i S sterują maszynami i ustalają prędkość okrętu, a klawisze A i D wychylenie steru. Maksymalne wychylenie steru w tej symulacji to ${ship.maxRudder}°. Spróbuj zwiększyć prędkość i wychylić ster.`,
+    `Na mapie widzisz dwa podstawowe wektory. AKTUALNY pokazuje kierunek, w którym ustawiony jest okręt. ZADANY pokazuje kurs, do którego zmierza autopilot lub kurs wpisany z klawiatury.`,
+    `Kurs zadany możesz wpisać cyframi. Na przykład wpisz 2 4 8, a potem Enter, aby zadać kurs 248°. Okręt nie obróci się natychmiast — będzie skręcał zgodnie z prędkością, sterem i bezwładnością.`,
+    `Zakrzywiona linia na mapie pokazuje przewidywany tor okrętu. Strzałka na końcu oznacza miejsce, w którym okręt znajdzie się za około 30 sekund, jeśli utrzyma obecny ruch.`,
+    `Przetestuj teraz, ${cap}: zwiększ prędkość, wychyl ster, wpisz kurs i obserwuj wektory. Kiedy skończysz, możesz zamknąć tutorial albo przejść do kolejnych misji w menu.`
+  ];
+}
+
+function showTutorialStep() {
+  tutorialPrompt.classList.remove("hidden");
+  const tutorialSteps = getTutorialSteps();
+  tutorialStep = clamp(tutorialStep, 0, tutorialSteps.length - 1);
+  tutorialText.textContent = tutorialSteps[tutorialStep];
+  tutorialPrevBtn.disabled = tutorialStep === 0;
+  tutorialNextBtn.textContent = tutorialStep === tutorialSteps.length - 1 ? "KONIEC" : "DALEJ";
+  tutorialNextBtn.disabled = tutorialStep === 1 && !tutorialStep1Complete;
+}
+
+function startTutorialMission1() {
+  captainName = (captainNameInput && captainNameInput.value ? captainNameInput.value.trim() : "") || "";
+  resetGameState();
+  tutorialMode = true;
+  tutorialStep = 0;
+  tutorialStep1Complete = false;
+  // Misja 1: tylko okręt, brak kontaktów.
+  if (target) target.alive = false;
+  aircraft.splice(0, aircraft.length);
+  subs.splice(0, subs.length);
+  radarEchoes.length = 0;
+  sonarPulses.length = 0;
+  lastRadarContact = null;
+  lastRadarAirContact = null;
+  lastSonarContact = null;
+  gameClock = 14 * 3600;
+  startMenu.classList.add("hidden");
+  document.body.classList.remove("menuOpen");
+  resumeGameBtn.classList.remove("hidden");
+  gameStarted = true;
+  showTutorialStep();
+  lastMessage = "Misja treningowa 1: sterowanie okrętem.";
+}
+
+function resetGameState() {
+  ship.x = WORLD_W / 2;
+  ship.y = WORLD_H * 0.62;
+  ship.heading = degToRad(0);
+  ship.speed = 0;
+  ship.targetSpeedIndex = STOP_INDEX;
+  ship.rudder = 0;
+  ship.orderedCourse = null;
+  ship.autopilot = false;
+
+  camera.manualOffsetX = 0;
+  camera.manualOffsetY = 0;
+  zoom = 1;
+
+  nextSurfaceContactId = 1;
+  nextSubContactId = 1;
+  contactTrackSeq = 1;
+  target = randomTarget();
+  aircraft.splice(0, aircraft.length, ...Array.from({ length: 3 }, (_, i) => makeCondor(i)));
+  subs.splice(0, subs.length, ...Array.from({ length: 4 }, () => makeSub()));
+
+  lastRadarContact = null;
+  lastRadarAirContact = null;
+  lastSonarContact = null;
+
+  shells.length = 0;
+  splashes.length = 0;
+  muzzleFlashes.length = 0;
+  wake.length = 0;
+  radarEchoes.length = 0;
+  sonarPulses.length = 0;
+  smoke.length = 0;
+  aaTracers.length = 0;
+  aaBursts.length = 0;
+  wrecks.length = 0;
+  navWaypoints.length = 0;
+
+  gameClock = 12 * 3600;
+  timeCompression = 1;
+  resources = { fuel:100, ammo5:520, ammoAA:2400, depthCharges:42, crewFatigue:8, engineWear:6, morale:86 };
+  activeWeapon = "guns"; dcLauncher = "stern"; dcDepth = 90; updateDepthChargeButtons();
+  setTimeCompression(1);
+  lastMessage = "Nowa gra rozpoczęta.";
+}
+
+function toggleGameMenu() {
+  if (startMenu.classList.contains("hidden")) {
+    gameStarted = false; startMenu.classList.remove("hidden"); document.body.classList.add("menuOpen"); resumeGameBtn.classList.remove("hidden"); lastMessage = "Gra zatrzymana — menu.";
+  } else {
+    startMenu.classList.add("hidden"); document.body.classList.remove("menuOpen"); gameStarted = true; lastMessage = "Powrót do gry.";
+  }
+}
+
+function updateAudioMuteState() {
+  if (!audioCtx) return;
+  if (timeCompression === 0 || !gameStarted) {
+    if (engineGain) engineGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.05);
+  }
+}
+
+function bellWatchChange() {
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  const freqs = [880, 1175, 880, 1175];
+  freqs.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, t + i * 0.18);
+    gain.gain.exponentialRampToValueAtTime(0.16, t + i * 0.18 + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.18 + 0.13);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t + i * 0.18);
+    osc.stop(t + i * 0.18 + 0.16);
+  });
+}
+
+function setTimeCompression(value) {
+  timeCompression = value;
+  for (const btn of [pauseTimeBtn,timeHalfBtn,time1Btn,time2Btn,time4Btn,time10Btn]) btn.classList.remove("active");
+  ({0:pauseTimeBtn,0.5:timeHalfBtn,1:time1Btn,2:time2Btn,4:time4Btn,10:time10Btn}[value] || time1Btn).classList.add("active");
+  updateAudioMuteState();
+}
+
+function nearestClickableContact(worldPoint) {
+  const all = [];
+  if (target && target.alive) all.push(target);
+  if (aircraftEnabled) all.push(...aircraft);
+  all.push(...subs);
+  let best = null;
+  let bd = Infinity;
+  for (const c of all) {
+    const d = dist(worldPoint, c);
+    if (d < bd) { bd = d; best = c; }
+  }
+  return bd < 650 ? best : null;
+}
+
+function centerCameraOn(point) {
+  camera.manualOffsetX = point.x - ship.x;
+  camera.manualOffsetY = point.y - ship.y;
+}
+
 function onKeyDown(event) {
   const key = event.key.toLowerCase();
+  if (key === "escape") { event.preventDefault(); toggleGameMenu(); return; }
+  if (key === "1") { setActiveWeapon("guns"); updateDepthChargeButtons(); return; }
+  if (key === "2" && event.code !== "Numpad2") { setActiveWeapon("depth"); updateDepthChargeButtons(); return; }
   keys.add(key);
   if (["arrowup", "arrowdown", "arrowleft", "arrowright", " ", "+", "-", "add", "subtract"].includes(key)) {
     event.preventDefault();
@@ -255,6 +613,30 @@ function onKeyDown(event) {
   if (/^[0-9]$/.test(event.key)) {
     if (inputMode === "AIM") angleInput = (angleInput + event.key).slice(-3);
     else courseInput = (courseInput + event.key).slice(-3);
+  }
+
+  if (key === "n") {
+    navPlanningMode = !navPlanningMode;
+    game.classList.toggle("plotting", navPlanningMode);
+    lastMessage = navPlanningMode ? "Tryb wytyczania kursu: kliknij do 5 punktów." : "Tryb wytyczania kursu wyłączony.";
+  }
+
+  if (key === "b") {
+    navWaypoints.length = 0;
+    ship.autopilot = false;
+    ship.orderedCourse = null;
+    navHardTurn = false;
+    lastMessage = "Plan kursu skasowany.";
+  }
+
+  if (key === "v") {
+    navFollowEnabled = !navFollowEnabled;
+    if (!navFollowEnabled) {
+      ship.autopilot = false;
+      ship.orderedCourse = null;
+      navHardTurn = false;
+    }
+    lastMessage = navFollowEnabled ? "Automatyczne podążanie za trasą włączone." : "Automatyczne podążanie za trasą wyłączone.";
   }
 
   if (event.key === "Enter") {
@@ -319,6 +701,16 @@ function worldToScreen(point) {
   return { x: (point.x - camera.x) / metersPerPixel, y: (point.y - camera.y) / metersPerPixel };
 }
 
+
+function uiFont(px, weight = "bold", family = "Courier New") {
+  return `${weight} ${Math.round(px * uiFontScale)}px ${family}`;
+}
+
+function uiPx(px) {
+  return px * uiFontScale;
+}
+
+
 function ensureAudio() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === "suspended") audioCtx.resume();
@@ -360,6 +752,9 @@ function randomTarget() {
   const d = 3200 + Math.random() * 5200;
   const a = Math.random() * Math.PI * 2;
   return {
+    contactId: nextSurfaceContactId++,
+    contactName: "Frachtowiec",
+    trackKind: "surface",
     x: (ship.x + Math.cos(a) * d + WORLD_W) % WORLD_W,
     y: (ship.y + Math.sin(a) * d + WORLD_H) % WORLD_H,
     length: 135,
@@ -376,6 +771,9 @@ function randomTarget() {
 function makeCondor(index = 0) {
   return {
     active: true,
+    contactId: index + 1,
+    identified: false,
+    trackKind: "air",
     x: ship.x - 7000 - index * 3500 + Math.random() * 2500,
     y: ship.y - 5000 + Math.random() * 10000,
     heading: angleToPoint({ x: ship.x - 7000, y: ship.y - 2500 + Math.random() * 5000 }, ship) + (Math.random() - 0.5) * 0.55,
@@ -383,7 +781,10 @@ function makeCondor(index = 0) {
     hp: 24,
     maxHp: 24,
     aaCooldown: 0,
-    damaged: false
+    damaged: false,
+    lastSeenX: null,
+    lastSeenY: null,
+    lastSeenAge: 999
   };
 }
 
@@ -391,12 +792,173 @@ function makeSub() {
   const d = 1800 + Math.random() * 3800;
   const a = Math.random() * Math.PI * 2;
   return {
+    contactId: nextSubContactId++,
+    contactName: "U-Boot",
+    trackKind: "sub",
     x: (ship.x + Math.cos(a) * d + WORLD_W) % WORLD_W,
     y: (ship.y + Math.sin(a) * d + WORLD_H) % WORLD_H,
     heading: Math.random() * Math.PI * 2,
     speed: 1.2 + Math.random() * 1.5,
     alive: true
   };
+}
+
+
+
+function ensureTrack(object, kind) {
+  if (!object.trackId) object.trackId = contactTrackSeq++;
+  if (!object.trackKind) object.trackKind = kind;
+  if (!object.trackHistory) object.trackHistory = [];
+  return object.trackId;
+}
+
+function recordContactDetection(object, kind, sensor) {
+  ensureTrack(object, kind);
+  if (!object.trackHistory) object.trackHistory = [];
+  const t = gameClock || weather.t || 0;
+  object.trackHistory.push({ x: object.x, y: object.y, t, sensor });
+  if (object.trackHistory.length > 8) object.trackHistory.shift();
+
+  if (object.trackHistory.length >= 2) {
+    const a = object.trackHistory[object.trackHistory.length - 2];
+    const b = object.trackHistory[object.trackHistory.length - 1];
+    const dt = Math.max(0.001, b.t - a.t);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    object.predictedCourse = radToCourse(Math.atan2(dy, dx));
+    object.predictedSpeed = Math.hypot(dx, dy) / dt;
+  }
+}
+
+function contactDisplayName(object, kind, visible = true) {
+  const id = object.trackId || object.contactId || "?";
+  if (kind === "air") return visible && object.identified ? `Condor ${id}` : `Samolot ${id}`;
+  if (kind === "sub") return `U-Boot ${id}`;
+  return `${object.contactName || "Frachtowiec"} ${id}`;
+}
+
+function predictedCourseLine(object) {
+  if (!object.trackHistory || object.trackHistory.length < 2 || object.predictedCourse === undefined) return "KURS ? ---";
+  return `KURS ${String(Math.round(object.predictedCourse)).padStart(3, "0")}°`;
+}
+
+function updateClockAndResources(dt) {
+  const factor = gameStarted ? timeCompression : 0;
+  gameClock = (gameClock + dt * factor * 60) % (24 * 3600);
+  resources.fuel = clamp(resources.fuel - Math.abs(ship.speed) * 0.0000045 * dt * factor, 0, 100);
+  resources.crewFatigue = clamp(resources.crewFatigue + 0.0009 * dt * factor * (weatherEnabled ? 1 + weather.wave * 0.8 : 1), 0, 100);
+  resources.engineWear = clamp(resources.engineWear + Math.abs(ship.speed) * 0.000002 * dt * factor, 0, 100);
+  const currentWatch = watchName((gameClock % (24*3600)) / 3600);
+  if (lastWatchName === null) lastWatchName = currentWatch;
+  if (currentWatch !== lastWatchName) {
+    lastWatchName = currentWatch;
+    bellWatchChange();
+  }
+}
+function sunMoonState() {
+  const hour = (gameClock % (24*3600)) / 3600;
+  const daylight = clamp(Math.sin(((hour - 6) / 12) * Math.PI), 0, 1);
+  const moonlight = clamp(Math.sin(((hour - 18) / 12) * Math.PI), 0, 1) * 0.28;
+  return { hour, daylight, moonlight, light: clamp(0.18 + daylight * 0.82 + moonlight, 0.12, 1.08) };
+}
+
+function watchName(hour) {
+  if (hour >= 0 && hour < 4) return "WACHTA ŚRODKOWA";
+  if (hour >= 4 && hour < 8) return "WACHTA PORANNA";
+  if (hour >= 8 && hour < 12) return "WACHTA PRZEDPOŁUDNIOWA";
+  if (hour >= 12 && hour < 16) return "WACHTA POPOŁUDNIOWA";
+  if (hour >= 16 && hour < 18) return "PIERWSZA PSIA WACHTA";
+  if (hour >= 18 && hour < 20) return "OSTATNIA PSIA WACHTA";
+  return "PIERWSZA WACHTA";
+}
+
+function formatClock() {
+  const total = Math.floor(gameClock % (24*3600));
+  const hour = total / 3600;
+  const h = String(Math.floor(total/3600)).padStart(2,"0");
+  const m = String(Math.floor((total%3600)/60)).padStart(2,"0");
+  const dayPart = sunMoonState().daylight > .15 ? "DZIEŃ" : "NOC";
+  return `${dayPart} ${h}:${m} — ${watchName(hour)}`;
+}
+function updateWeather(dt) {
+  if (!weatherEnabled) {
+    weather.rain += (0 - weather.rain) * 0.08 * dt;
+    weather.wave += (0.12 - weather.wave) * 0.08 * dt;
+    weather.visibility += (9000 - weather.visibility) * 0.08 * dt;
+    return;
+  }
+
+  weather.changeTimer -= dt;
+  if (weather.changeTimer <= 0) {
+    weather.targetWindDir += (Math.random() - 0.5) * degToRad(38);
+    weather.targetWindSpeed = clamp(weather.targetWindSpeed + (Math.random() - 0.48) * 5, 0.5, 22);
+    weather.targetRain = clamp(weather.targetRain + (Math.random() - 0.5) * 0.30, 0, 1);
+    weather.targetWave = clamp(0.10 + weather.targetWindSpeed / 30 + weather.targetRain * 0.20, 0.05, 1);
+    updateForecast();
+    weather.changeTimer = 20 + Math.random() * 30;
+  }
+
+  weather.windDir += angleDiffRad(weather.targetWindDir, weather.windDir) * 0.018 * dt;
+  weather.windSpeed += (weather.targetWindSpeed - weather.windSpeed) * 0.018 * dt;
+  weather.rain += (weather.targetRain - weather.rain) * 0.018 * dt;
+  weather.wave += (weather.targetWave - weather.wave) * 0.018 * dt;
+  const desiredVisibility = clamp(8500 - weather.rain * 4700 - weather.wave * 1700 - Math.max(0, weather.windSpeed - 12) * 70, 1600, 9000);
+  weather.visibility += (desiredVisibility - weather.visibility) * 0.010 * dt;
+}
+
+function updateForecast() {
+  forecast.windDir = weather.targetWindDir + (Math.random() - 0.5) * degToRad(18);
+  forecast.windSpeed = clamp(weather.targetWindSpeed + (Math.random() - 0.5) * 3, 0.2, 24);
+  forecast.rain = clamp(weather.targetRain + (Math.random() - 0.5) * 0.22, 0, 1);
+  forecast.wave = clamp(0.12 + forecast.windSpeed / 28 + forecast.rain * 0.16, 0.05, 1);
+  forecast.visibility = clamp(8500 - forecast.rain * 4700 - forecast.wave * 1700 - Math.max(0, forecast.windSpeed - 12) * 70, 1600, 9000);
+}
+
+function weatherName(rain) {
+  if (rain > 0.66) return "DESZCZ";
+  if (rain > 0.25) return "MŻAWKA";
+  return "SUCHO";
+}
+
+
+function updateNavigationPlan() {
+  navHardTurn = false;
+  if (!navFollowEnabled || navWaypoints.length === 0) return;
+
+  let next = navWaypoints[0];
+  let range = dist(ship, next);
+
+  if (range < 500) {
+    navWaypoints.shift();
+    if (navWaypoints.length === 0) {
+      ship.autopilot = false;
+      ship.orderedCourse = null;
+      lastMessage = "Osiągnięto ostatni punkt kursu.";
+      return;
+    }
+    next = navWaypoints[0];
+    range = dist(ship, next);
+  }
+
+  const desiredCourse = radToCourse(angleToPoint(ship, next));
+  const currentCourse = radToCourse(ship.heading);
+  const turn = Math.abs(angleDiffDeg(desiredCourse, currentCourse));
+
+  let nextTurn = 0;
+  if (navWaypoints.length > 1) {
+    const nextLegCourse = radToCourse(angleToPoint(navWaypoints[0], navWaypoints[1]));
+    nextTurn = Math.abs(angleDiffDeg(nextLegCourse, desiredCourse));
+  }
+
+  ship.orderedCourse = desiredCourse;
+  ship.autopilot = true;
+
+  const closingSpeed = Math.max(Math.abs(ship.speed) * SIM_SPEED, 1);
+  const eta = range / closingSpeed;
+  navHardTurn = turn > 28 || (nextTurn > 35 && range < 1500) || (turn > 18 && eta < 28);
+
+  if (navHardTurn && ship.targetSpeedIndex > 4) ship.targetSpeedIndex = 4;
+  if ((turn > 65 || (nextTurn > 75 && range < 1200)) && ship.targetSpeedIndex > 3) ship.targetSpeedIndex = 3;
 }
 
 function updateOrders(dt) {
@@ -451,7 +1013,7 @@ function updateOrders(dt) {
   if (keys.has("o")) guns.range = clamp(guns.range + 520 * dt, guns.minRange, guns.maxRange);
   if (keys.has("l")) guns.range = clamp(guns.range - 520 * dt, guns.minRange, guns.maxRange);
 
-  if (once(" ")) fireGuns();
+  if (once(" ")) { activeWeapon === "depth" ? dropDepthCharge() : fireGuns(); }
 
   if (guns.mode === "AUTO" && target.alive) {
     guns.bearing += clamp(angleDiffRad(angleToPoint(ship, target), guns.bearing), -guns.turnRate * dt, guns.turnRate * dt);
@@ -462,15 +1024,18 @@ function updateOrders(dt) {
 function updateAutoFire(dt) {
   if (!autoFire || !target.alive) return;
   guns.mode = "AUTO";
+
   const desired = angleToPoint(ship, target);
+  const range = dist(ship, target);
   guns.bearing += clamp(angleDiffRad(desired, guns.bearing), -guns.turnRate * dt, guns.turnRate * dt);
+  guns.range += clamp(range - guns.range, -1500 * dt, 1500 * dt);
 
   const aimError = Math.abs(angleDiffRad(desired, guns.bearing));
-  const range = dist(ship, target);
-  guns.range += clamp(range - guns.range, -700 * dt, 700 * dt);
+  const rangeError = Math.abs(guns.range - range);
+  const rangeReady = range >= guns.minRange && range <= guns.maxRange;
 
-  if (aimError < degToRad(2.5) && range >= guns.minRange && range <= guns.maxRange) {
-    fireGuns();
+  if (aimError < degToRad(4.5) && rangeReady && rangeError < 220) {
+    fireGuns(true);
   }
 }
 
@@ -481,11 +1046,15 @@ function updatePhysics(dt) {
 
   if (ship.autopilot && ship.orderedCourse !== null) {
     const diff = angleDiffDeg(ship.orderedCourse, radToCourse(ship.heading));
-    ship.rudder = clamp(diff * 0.16, -15, 15);
+    if (navHardTurn) {
+      ship.rudder = diff >= 0 ? ship.maxRudder : -ship.maxRudder;
+    } else {
+      ship.rudder = clamp(diff * 0.28, -ship.maxRudder, ship.maxRudder);
+    }
     if (Math.abs(diff) < 1.2) {
       ship.rudder = 0;
       ship.heading = degToRad(ship.orderedCourse);
-      ship.autopilot = false;
+      if (navWaypoints.length === 0) ship.autopilot = false;
     }
   }
 
@@ -527,11 +1096,21 @@ function updateTargets(dt) {
     if (Math.random() < dt * 0.035) sub.heading += (Math.random() - 0.5) * 0.5;
   }
 
+  if (!aircraftEnabled) return;
   for (let index = 0; index < aircraft.length; index++) {
     const plane = aircraft[index];
     plane.x += Math.cos(plane.heading) * plane.speed * dt * 2.2;
     plane.y += Math.sin(plane.heading) * plane.speed * dt * 2.2;
     if (dist(plane, ship) > 18000 || plane.hp <= 0) Object.assign(plane, makeCondor(index));
+    const visible = dist(ship, plane) <= weather.visibility;
+    if (visible) {
+      plane.identified = true;
+      plane.lastSeenX = plane.x;
+      plane.lastSeenY = plane.y;
+      plane.lastSeenAge = 0;
+    } else if (plane.lastSeenAge !== null) {
+      plane.lastSeenAge += dt;
+    }
     updateAA(plane, dt);
   }
 }
@@ -563,8 +1142,10 @@ function updateWakeSmoke(dt) {
 function updateAA(plane, dt) {
   plane.aaCooldown -= dt;
   const range = dist(ship, plane);
-  if (range > 3810 || plane.aaCooldown > 0) return;
+  if (range > AA_RANGE || plane.aaCooldown > 0) return;
 
+  if (resources.ammoAA <= 0) return;
+  resources.ammoAA = Math.max(0, resources.ammoAA - 3);
   plane.aaCooldown = 0.12;
   const muzzle = {
     x: ship.x + Math.cos(ship.heading) * (12 - Math.random() * 45),
@@ -606,6 +1187,10 @@ function updateSonar(dt) {
   if (sonar.ping <= 0) {
     const contact = nearestSonarContact();
     sonarPulses.push({ x: ship.x, y: ship.y, angle: sonar.bearing + ship.heading, t: 0 });
+    if (contact) {
+      recordContactDetection(contact, "sub", "sonar");
+      lastSonarContact = { x: contact.x, y: contact.y, bearing: radToCourse(angleToPoint(ship, contact)), range: Math.round(dist(ship, contact)), age: 0, name: contactDisplayName(contact, "sub", true), predicted: predictedCourseLine(contact) };
+    }
     blip(contact ? 520 : 1560, 0.14, contact ? 0.16 : 0.12, contact ? "triangle" : "square");
     sonar.ping = 2.4;
   }
@@ -614,11 +1199,12 @@ function updateSonar(dt) {
 function updateRadar(dt) {
   if (!radar.on) return;
   if (lastRadarContact) lastRadarContact.age += dt;
+  if (lastSonarContact) lastSonarContact.age += dt;
   if (lastRadarAirContact) lastRadarAirContact.age += dt;
 
   radar.sweepAngle = (radar.sweepAngle + dt * Math.PI * 2 / 5.8) % (Math.PI * 2);
   checkRadar(target, "surface");
-  for (const plane of aircraft) checkRadar(plane, "air");
+  if (aircraftEnabled) for (const plane of aircraft) checkRadar(plane, "air");
 
   for (let i = radarEchoes.length - 1; i >= 0; i--) {
     radarEchoes[i].t += dt;
@@ -635,8 +1221,14 @@ function checkRadar(object, kind) {
   const tolerance = 0.035 + Math.min(0.018, range / radar.range * 0.018);
   if (Math.abs(angleDiffRad(bearing, radar.sweepAngle)) < tolerance) {
     radarEchoes.push({ x: object.x, y: object.y, t: 0, kind });
-    if (kind === "surface") lastRadarContact = { bearing: radToCourse(bearing), range: Math.round(range), age: 0, name: "Frachtowiec" };
-    if (kind === "air") lastRadarAirContact = { bearing: radToCourse(bearing), range: Math.round(range), age: 0, name: "Fw 200 Condor" };
+    recordContactDetection(object, kind, "radar");
+    if (kind === "surface") {
+      lastRadarContact = { bearing: radToCourse(bearing), range: Math.round(range), age: 0, name: contactDisplayName(object, "surface", true), predicted: predictedCourseLine(object) };
+    }
+    if (kind === "air") {
+      const visible = dist(ship, object) <= weather.visibility;
+      lastRadarAirContact = { bearing: radToCourse(bearing), range: Math.round(range), age: 0, name: contactDisplayName(object, "air", visible), predicted: predictedCourseLine(object) };
+    }
     blip(kind === "air" ? 1620 : 1320, 0.045, 0.08, "square");
   }
 }
@@ -649,7 +1241,7 @@ function ballisticFlightTime(range) {
   return (2 * v * Math.sin(angle)) / g;
 }
 
-function fireGuns() {
+function fireGuns(isAuto = false) {
   ensureAudio();
   let fired = false;
 
@@ -661,6 +1253,8 @@ function fireGuns() {
     const aim = getAimPoint();
     const flightTime = ballisticFlightTime(guns.range);
 
+    if (resources.ammo5 <= 0) { lastMessage = "Brak amunicji 5”/38."; return; }
+    resources.ammo5 -= 1;
     shells.push({
       startX: start.x,
       startY: start.y,
@@ -679,14 +1273,14 @@ function fireGuns() {
     blip(92, 0.16, 0.20, "square");
     burst(0.18, 0.20, 260);
     fired = true;
-    break;
+    if (!isAuto) break;
   }
 
-  if (!fired) lastMessage = "Żadna armata nie ma sektora ostrzału albo trwa przeładowanie.";
+  if (!fired && !isAuto) lastMessage = "Żadna armata nie ma sektora ostrzału albo trwa przeładowanie.";
 }
 
 function turretCanFire(turret, bearing) {
-  const relative = (radToCourse(bearing - ship.heading) + 360) % 360;
+  const relative = ((angleDiffRad(bearing, ship.heading) * 180 / Math.PI) + 360) % 360;
   const low = (turret.arc[0] + 360) % 360;
   const high = (turret.arc[1] + 360) % 360;
   return low < high ? relative >= low && relative <= high : relative >= low || relative <= high;
@@ -767,13 +1361,14 @@ function draw() {
   drawRadarSweep();
   drawSonarCone();
   drawSensorEffects();
+  drawContactVectors();
   drawEffects();
   drawAircraft();
   drawAA();
   drawSmoke();
 
   const shipScreen = worldToScreen(ship);
-  drawFletcher(ctx, shipScreen.x, shipScreen.y, ship.heading, clamp(0.18 * Math.sqrt(zoom), 0.18, 12));
+  drawFletcher(ctx, shipScreen.x, shipScreen.y, ship.heading, clamp(0.18 * Math.sqrt(zoom), 0.18, 40));
 
   drawBoxes();
   drawHud();
@@ -790,15 +1385,61 @@ function drawOcean() {
   gradient.addColorStop(1, "#071923");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, w, h);
+  drawCelestialLighting();
 
   drawGrid();
   drawWaves();
   drawVisibility();
   drawWake();
-  drawRain();
-  drawWind();
+  if (weatherEnabled) drawRain();
+  if (weatherEnabled) drawWind();
 }
 
+function drawCelestialLighting() {
+  const state = sunMoonState();
+  ctx.save();
+
+  const darkness = clamp(1 - state.light, 0, 0.78);
+  ctx.fillStyle = `rgba(0,10,18,${darkness})`;
+  ctx.fillRect(0,0,game.width,game.height);
+
+  const isDay = state.daylight >= state.moonlight;
+  const t = isDay ? clamp((state.hour - 6) / 12, 0, 1) : clamp((state.hour - 18) / 12, 0, 1);
+  const arc = Math.sin(t * Math.PI);
+
+  // Słońce/księżyc bliżej krawędzi i bez szerokiej poświaty.
+  const x = game.width * (0.035 + 0.93 * t);
+  const y = game.height * (isDay ? (0.115 - 0.055 * arc) : (0.135 - 0.045 * arc));
+  const bodyRadius = Math.max(6, Math.min(game.width, game.height) * (isDay ? 0.014 : 0.011));
+
+  ctx.fillStyle = isDay ? "rgba(255,238,160,.88)" : "rgba(205,225,255,.78)";
+  ctx.beginPath();
+  ctx.arc(x, y, bodyRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (!isDay) {
+    ctx.fillStyle = "rgba(7,19,26,.58)";
+    ctx.beginPath();
+    ctx.arc(x + bodyRadius * .42, y - bodyRadius * .12, bodyRadius * .88, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const s = worldToScreen(ship);
+  const shadowAngle = Math.atan2(s.y-y,s.x-x);
+  const shipScale = clamp(0.18 * Math.sqrt(zoom), 0.18, 40);
+  const lowAngleBoost = 0.75 + (1 - arc) * 0.45;
+  const shadowLen = clamp(20 * shipScale * lowAngleBoost, 7, 80);
+  const shadowWidth = clamp(3.8 * shipScale, 2.4, 20);
+  const shadowAlpha = isDay ? 0.13 + (1 - state.daylight) * 0.08 : 0.10;
+  ctx.translate(s.x,s.y);
+  ctx.rotate(shadowAngle);
+  ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`;
+  ctx.beginPath();
+  ctx.ellipse(shadowLen * .55, 0, shadowLen, shadowWidth, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
 function drawGrid() {
   const step = 10000;
   const w = game.width;
@@ -827,25 +1468,36 @@ function drawGrid() {
 }
 
 function drawWaves() {
+  if (!seaLayerOn) return;
   const w = game.width;
   const h = game.height;
   ctx.save();
-  ctx.strokeStyle = `rgba(182,205,210,${0.04 + weather.wave * 0.04})`;
-  ctx.lineWidth = 1;
 
-  const spacing = 85;
-  const segment = 120;
-  const amp = 0.45 + weather.wave * 1.35;
+  const zoomFactor = clamp(Math.sqrt(Math.max(zoom, 0.1)), 0.45, 5.5);
+  const waveHeight = weather.wave;
+  const spacingM = clamp(135 / zoomFactor, 28, 180);
+  const segmentM = clamp(210 / zoomFactor, 42, 260);
+  const amp = clamp((0.45 + waveHeight * 3.2) * zoomFactor, 0.45, 14);
+  const alpha = clamp(0.035 + waveHeight * 0.075, 0.025, 0.14);
 
-  for (let wy = Math.floor(camera.y / spacing) * spacing; wy <= camera.y + h * metersPerPixel + spacing; wy += spacing) {
-    for (let wx = Math.floor(camera.x / segment) * segment; wx <= camera.x + w * metersPerPixel + segment; wx += segment) {
+  ctx.strokeStyle = `rgba(190,220,225,${alpha})`;
+  ctx.lineWidth = clamp(0.8 * zoomFactor, 0.55, 2.3);
+
+  const worldLeft = camera.x;
+  const worldRight = camera.x + w * metersPerPixel;
+  const worldTop = camera.y;
+  const worldBottom = camera.y + h * metersPerPixel;
+
+  for (let wy = Math.floor(worldTop / spacingM) * spacingM; wy <= worldBottom + spacingM; wy += spacingM) {
+    for (let wx = Math.floor(worldLeft / segmentM) * segmentM; wx <= worldRight + segmentM; wx += segmentM) {
       const sx = (wx - camera.x) / metersPerPixel;
       const sy = (wy - camera.y) / metersPerPixel;
-      const len = Math.max(5, Math.min(22, segment / metersPerPixel * 0.28));
-      const y = sy + Math.sin((wx + wy * 0.7) * 0.012) * amp;
+      const len = clamp(segmentM / metersPerPixel * 0.36, 5, 54);
+      const phase = Math.sin((wx * 0.014 + wy * 0.009) + weather.t * (0.25 + waveHeight * 0.35));
+      const y = sy + phase * amp * 0.22;
       ctx.beginPath();
       ctx.moveTo(sx - len * 0.5, y);
-      ctx.quadraticCurveTo(sx, y - amp * 0.7, sx + len * 0.5, y);
+      ctx.quadraticCurveTo(sx, y - amp, sx + len * 0.5, y);
       ctx.stroke();
     }
   }
@@ -883,7 +1535,7 @@ function drawWind() {
   const dy = Math.sin(weather.windDir);
   const px = -dy;
   const py = dx;
-  const offset = (weather.t * weather.windSpeed * 0.35) % spacing;
+  const offset = (weather.t * Math.max(8, weather.windSpeed * 7.5)) % spacing;
 
   ctx.save();
   ctx.globalAlpha = 0.18;
@@ -959,7 +1611,8 @@ function drawRain() {
 function drawOverlays() {
   drawRangeCircles();
   drawPredictedTrack();
-  drawArrow(ship, ship.heading, 900, "kurs", "rgba(225,235,225,.85)");
+  drawNavigationPlan();
+  drawDesiredCourseVector();
   drawGunnery();
 }
 
@@ -979,13 +1632,17 @@ function drawRangeCircles() {
   circle(sonar.range, "rgba(111,226,93,.82)", [9, 5]);
   circle(radar.range, "rgba(74,182,255,.95)", [9, 5], 2.2);
   circle(guns.maxRange, "rgba(217,170,42,.9)", [10, 5]);
+  circle(AA_RANGE, "rgba(255,74,53,.72)", [6, 6], 1.5);
   circle(weather.visibility, "rgba(207,215,178,.75)", [10, 8]);
+  circle(HORIZON_RANGE, "rgba(185,205,215,.55)", [14, 10], 1.4);
 
   if (infoOn) {
     labelRange(`RADAR ${radar.range}m`, radar.range, 40, "#4ab6ff");
     labelRange(`SONAR ${sonar.range}m`, sonar.range, 140, "#6fe25d");
     labelRange(`DZIAŁA ${guns.maxRange}m`, guns.maxRange, 220, "#d9aa2a");
+    labelRange(`AA ${AA_RANGE}m`, AA_RANGE, 260, "#ff4a35");
     labelRange(`WIDZ. ${Math.round(weather.visibility)}m`, weather.visibility, 80, "#cfd7b2");
+    labelRange(`HORYZONT ${HORIZON_RANGE}m`, HORIZON_RANGE, 315, "#b9cdd7");
   }
 }
 
@@ -994,7 +1651,7 @@ function labelRange(text, range, degrees, color) {
   const x = center.x + Math.cos(degToRad(degrees)) * range / metersPerPixel;
   const y = center.y + Math.sin(degToRad(degrees)) * range / metersPerPixel;
   ctx.save();
-  ctx.font = "bold 13px Courier New";
+  ctx.font = uiFont(13);
   ctx.fillStyle = "rgba(5,8,6,.72)";
   ctx.strokeStyle = color;
   const width = ctx.measureText(text).width + 12;
@@ -1021,12 +1678,136 @@ function drawPredictedTrack() {
   }
 
   ctx.save();
-  ctx.strokeStyle = "rgba(255,196,80,.42)";
+  ctx.strokeStyle = "rgba(90,220,255,.68)";
+  ctx.lineWidth = Math.max(1.8, 2.4 * uiFontScale);
+  ctx.fillStyle = "rgba(90,220,255,.90)";
   ctx.setLineDash([5, 8]);
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
   for (const point of points) ctx.lineTo(point.x, point.y);
   ctx.stroke();
+  ctx.setLineDash([]);
+
+  const end = points[points.length - 1];
+  const prev = points[points.length - 2];
+  const angle = Math.atan2(end.y - prev.y, end.x - prev.x);
+  ctx.translate(end.x, end.y);
+  ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-14, -7);
+  ctx.lineTo(-14, 7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.rotate(-angle);
+  ctx.font = uiFont(14);
+  ctx.fillText("30s", 10, -8);
+  ctx.restore();
+}
+
+
+function formatDurationMS(seconds) {
+  seconds = Math.max(0, Math.round(seconds));
+  const m = Math.floor(seconds / 60);
+  const s = String(seconds % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+function drawNavigationPlan() {
+  if (navWaypoints.length === 0) return;
+  ctx.save();
+  ctx.strokeStyle = navFollowEnabled ? "rgba(255,210,90,.72)" : "rgba(255,210,90,.32)";
+  ctx.fillStyle = navFollowEnabled ? "rgba(255,210,90,.88)" : "rgba(255,210,90,.45)";
+  ctx.lineWidth = Math.max(1.0, 1.35 * uiFontScale);
+  ctx.setLineDash([10, 5]);
+
+  const start = worldToScreen(ship);
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  for (const wp of navWaypoints) {
+    const p = worldToScreen(wp);
+    ctx.lineTo(p.x, p.y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  let previous = ship;
+  let cumulativeMeters = 0;
+  const effectiveSpeed = Math.max(Math.abs(ship.speed) * SIM_SPEED, 1.5);
+
+  navWaypoints.forEach((wp, index) => {
+    cumulativeMeters += dist(previous, wp);
+    previous = wp;
+    const eta = cumulativeMeters / effectiveSpeed;
+    const p = worldToScreen(wp);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 8 + index * 0.6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.font = uiFont(13);
+    ctx.fillText(String(index + 1), p.x + 11, p.y - 8);
+    if (infoOn) {
+      ctx.font = uiFont(12);
+      ctx.fillText(formatDurationMS(eta), p.x + 11, p.y + uiPx(10));
+    }
+  });
+  ctx.restore();
+}
+
+function drawDesiredCourseVector() {
+  const speedKnots = Math.abs(ship.speed) * MS_TO_KNOT;
+  const actualAngle = ship.heading;
+  const desiredAngle = ship.autopilot && ship.orderedCourse !== null ? degToRad(ship.orderedCourse) : ship.heading;
+  const same = Math.abs(angleDiffRad(actualAngle, desiredAngle)) < degToRad(2.0);
+  const length = 210 + speedKnots * 28;
+
+  drawCourseVectorLine(actualAngle, length, same ? "rgba(235,255,235,.90)" : "rgba(235,255,235,.72)", same ? [] : [12, 8], speedKnots, same ? "AKTUALNY=ZADANY" : "AKTUALNY");
+  if (!same) {
+    drawCourseVectorLine(desiredAngle, length * 1.02, "rgba(255,210,90,.82)", [6, 8], null, "ZADANY");
+  }
+}
+
+function drawCourseVectorLine(angle, length, color, dash, speedKnots, label) {
+  const origin = worldToScreen(ship);
+  const endX = origin.x + Math.cos(angle) * (length / metersPerPixel);
+  const endY = origin.y + Math.sin(angle) * (length / metersPerPixel);
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(1.2, 1.7 * uiFontScale);
+  ctx.setLineDash(dash);
+
+  ctx.beginPath();
+  ctx.moveTo(origin.x, origin.y);
+  ctx.lineTo(endX, endY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const arrowAngle = Math.atan2(endY - origin.y, endX - origin.x);
+  ctx.translate(endX, endY);
+  ctx.rotate(arrowAngle);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-16, -8);
+  ctx.lineTo(-16, 8);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.rotate(-arrowAngle);
+  ctx.font = uiFont(14);
+  const course = String(Math.round(radToCourse(angle))).padStart(3, "0");
+  const speedTxt = speedKnots === null ? "" : ` ${speedKnots.toFixed(1)} w.`;
+  const text = `${label} ${course}°${speedTxt}`;
+  const labelX = 24;
+  const labelY = -18;
+  const metrics = ctx.measureText(text);
+  ctx.fillStyle = "rgba(5,8,6,.78)";
+  ctx.strokeStyle = color;
+  roundRect(ctx, labelX - 6, labelY - uiPx(15), metrics.width + 12, uiPx(22), uiPx(5));
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.fillText(text, labelX, labelY);
   ctx.restore();
 }
 
@@ -1071,7 +1852,7 @@ function drawGunnery() {
 
   if (infoOn) {
     ctx.save();
-    ctx.font = "bold 14px Courier New";
+    ctx.font = uiFont(14);
     ctx.fillStyle = "#d9aa2a";
     ctx.fillText(`POCISK ${ballisticFlightTime(guns.range).toFixed(1)}s`, aimScreen.x + 18, aimScreen.y + 28);
     ctx.fillText(`ODL ${target.alive ? Math.round(Math.hypot(aim.x - target.x, aim.y - target.y)) : "---"}m`, aimScreen.x + 18, aimScreen.y + 46);
@@ -1109,32 +1890,112 @@ function drawSonarCone() {
   ctx.save();
   ctx.translate(center.x, center.y);
   ctx.rotate(angle);
+  ctx.globalCompositeOperation = "screen";
+
   const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
-  gradient.addColorStop(0, "rgba(111,226,93,.105)");
-  gradient.addColorStop(0.45, "rgba(111,226,93,.052)");
-  gradient.addColorStop(1, "rgba(111,226,93,.010)");
+  gradient.addColorStop(0.00, "rgba(80,255,120,.34)");
+  gradient.addColorStop(0.32, "rgba(80,255,120,.20)");
+  gradient.addColorStop(0.72, "rgba(80,255,120,.10)");
+  gradient.addColorStop(1.00, "rgba(80,255,120,.035)");
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  for (let a = -half; a <= half + 0.001; a += sonar.beamWidth / 30) ctx.lineTo(Math.cos(a) * radius, Math.sin(a) * radius);
+  for (let a = -half; a <= half + 0.001; a += sonar.beamWidth / 100) {
+    ctx.lineTo(Math.cos(a) * radius, Math.sin(a) * radius);
+  }
   ctx.closePath();
   ctx.fill();
 
-  const phase = (weather.t * 420) % sonar.range;
-  for (let k = 0; k < 3; k++) {
-    const pulseRadius = ((phase + k * sonar.range / 3) % sonar.range) / metersPerPixel;
-    ctx.strokeStyle = `rgba(111,226,93,${0.34 * (1 - pulseRadius / radius)})`;
-    ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(155,255,145,.52)";
+  ctx.lineWidth = Math.max(0.7, 0.95 * uiFontScale);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(Math.cos(-half) * radius, Math.sin(-half) * radius);
+  ctx.moveTo(0, 0);
+  ctx.lineTo(Math.cos(half) * radius, Math.sin(half) * radius);
+  ctx.stroke();
+
+  // Wyraźna fala aktywnego sonaru: łuk wypełniający tylko zadany stożek.
+  const pulseMeters = (weather.t * 1150) % sonar.range;
+  for (const offset of [0, sonar.range * 0.33, sonar.range * 0.66]) {
+    const rM = (pulseMeters + offset) % sonar.range;
+    const r = rM / metersPerPixel;
+    const alpha = 0.88 * (1 - rM / sonar.range);
+    ctx.strokeStyle = `rgba(220,255,190,${alpha})`;
+    ctx.lineWidth = Math.max(1.8, 2.4 * uiFontScale);
     ctx.beginPath();
-    for (let a = -half; a <= half + 0.001; a += sonar.beamWidth / 32) {
-      const x = Math.cos(a) * pulseRadius;
-      const y = Math.sin(a) * pulseRadius;
-      if (a === -half) ctx.moveTo(x, y);
+    for (let a = -half; a <= half + 0.001; a += sonar.beamWidth / 140) {
+      const x = Math.cos(a) * r;
+      const y = Math.sin(a) * r;
+      if (a <= -half + 0.0001) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     ctx.stroke();
   }
 
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+
+  // Kontakt w stożku: krąg rozchodzący się od wykrytego kontaktu.
+  if (lastSonarContact && lastSonarContact.age < 3 && lastSonarContact.x !== undefined) {
+    const p = worldToScreen(lastSonarContact);
+    const rr = 18 + lastSonarContact.age * 32;
+    ctx.save();
+    ctx.strokeStyle = `rgba(120,255,120,${0.8 * (1 - lastSonarContact.age / 3)})`;
+    ctx.lineWidth = Math.max(1.5, 2.2 * uiFontScale);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+
+function drawContactVectors() {
+  const contacts = [];
+  if (typeof target !== "undefined" && target && target.alive) contacts.push(target);
+  if (typeof aircraft !== "undefined") contacts.push(...aircraft);
+  if (typeof subs !== "undefined") contacts.push(...subs);
+
+  ctx.save();
+  for (const c of contacts) {
+    if (!c.trackHistory || c.trackHistory.length < 2 || c.predictedCourse === undefined) continue;
+
+    const p = worldToScreen(c);
+    const courseRad = degToRad(c.predictedCourse);
+    const speed = c.predictedSpeed || 35;
+    const lenMeters = clamp(speed * 180, 900, 4200);
+    const len = lenMeters / metersPerPixel;
+
+    const col = "rgba(255,76,60,.92)";
+    ctx.strokeStyle = col;
+    ctx.fillStyle = col;
+    ctx.lineWidth = clamp(1.1 * uiFontScale / Math.sqrt(Math.max(zoom, 0.2)), 0.85, 2.2);
+    ctx.setLineDash([10, 7]);
+
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + Math.cos(courseRad) * len, p.y + Math.sin(courseRad) * len);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const ex = p.x + Math.cos(courseRad) * len;
+    const ey = p.y + Math.sin(courseRad) * len;
+
+    ctx.save();
+    ctx.translate(ex, ey);
+    ctx.rotate(courseRad);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-10, -4.5);
+    ctx.lineTo(-10, 4.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    if (typeof uiFont === "function") ctx.font = uiFont(12);
+    ctx.fillText(`${String(Math.round(c.predictedCourse)).padStart(3, "0")}°`, ex + 8, ey - 6);
+  }
   ctx.restore();
 }
 
@@ -1216,7 +2077,28 @@ function drawSubs() {
 }
 
 function drawAircraft() {
+  if (!aircraftEnabled) return;
   for (const plane of aircraft) {
+    const visible = dist(ship, plane) <= weather.visibility;
+
+    if (!visible) {
+      if (plane.lastSeenX !== null && plane.lastSeenAge < 30) {
+        const p = worldToScreen({ x: plane.lastSeenX, y: plane.lastSeenY });
+        ctx.save();
+        ctx.globalAlpha = Math.max(0.20, 0.75 * (1 - plane.lastSeenAge / 30));
+        ctx.strokeStyle = "rgba(120,210,255,.90)";
+        ctx.fillStyle = "rgba(120,210,255,.90)";
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 13, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.font = uiFont(12);
+        ctx.fillText(`Samolot ${plane.contactId} OST. ${plane.lastSeenAge.toFixed(0)}s`, p.x + 16, p.y - 10);
+        ctx.restore();
+      }
+      continue;
+    }
+
     const point = worldToScreen(plane);
     ctx.save();
     ctx.translate(point.x, point.y);
@@ -1309,6 +2191,14 @@ function drawEffects() {
   }
 
   for (const splash of splashes) {
+    if (splash.depthCharge) {
+      explodeDepthCharge(splash);
+      if (splash.t > splash.delay && !splash.exploded) {
+        splash.exploded = true;
+        burst(0.35, 0.32, 90);
+      }
+      continue;
+    }
     const point = worldToScreen(splash);
     const progress = splash.t / splash.maxT;
     ctx.save();
@@ -1374,34 +2264,63 @@ function drawTurret(context, turret, angle, scale) {
 }
 
 function drawBoxes() {
-  drawBox(14, 12, [`POZYCJA`, `X ${Math.round(ship.x)} m`, `Y ${Math.round(ship.y)} m`, `SEKTOR ${Math.floor(ship.x / 10000)}-${Math.floor(ship.y / 10000)}`]);
+  const leftX = 14;
+  let leftY = 12;
+  const gap = uiPx(10);
+  const boxW = 190 * uiFontScale;
 
-  drawBox(14, 124, lastRadarContact && lastRadarContact.age < 12
-    ? [`${lastRadarContact.name}`, `NAMIAR ${lastRadarContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${lastRadarContact.range} m`, `OD ECHA ${lastRadarContact.age.toFixed(1)} s`]
-    : [`RADAR CEL`, `BRAK`, `---`, `---`]);
+  leftY = drawBox(leftX, leftY, [`POZYCJA`, `X ${Math.round(ship.x)} m`, `Y ${Math.round(ship.y)} m`, `SEKTOR ${Math.floor(ship.x / 10000)}-${Math.floor(ship.y / 10000)}`], boxW) + gap;
 
-  drawBox(14, 236, lastRadarAirContact && lastRadarAirContact.age < 12
-    ? [`${lastRadarAirContact.name}`, `NAMIAR ${lastRadarAirContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${lastRadarAirContact.range} m`, `OD ECHA ${lastRadarAirContact.age.toFixed(1)} s`]
-    : [`RADAR LOT`, `BRAK`, `---`, `---`]);
+  leftY = drawBox(leftX, leftY, lastRadarContact && lastRadarContact.age < 12
+    ? [`${lastRadarContact.name}`, `NAMIAR ${lastRadarContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${lastRadarContact.range} m`, `OD ECHA ${lastRadarContact.age.toFixed(1)} s`, lastRadarContact.predicted || "KURS ? ---"]
+    : [`RADAR CEL`, `BRAK`, `---`, `---`], boxW) + gap;
 
-  drawBox(game.width - 204, 12, [`POGODA`, `WIATR ${radToCourse(weather.windDir).toFixed(0)}°`, `${weather.windSpeed.toFixed(1)} m/s`, `FALA ${weather.wave.toFixed(2)}`, `WIDZ. ${Math.round(weather.visibility)} m`], 190);
+  leftY = drawBox(leftX, leftY, lastRadarAirContact && lastRadarAirContact.age < 12
+    ? [`${lastRadarAirContact.name}`, `NAMIAR ${lastRadarAirContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${lastRadarAirContact.range} m`, `OD ECHA ${lastRadarAirContact.age.toFixed(1)} s`, lastRadarAirContact.predicted || "KURS ? ---"]
+    : [`RADAR LOT`, aircraftEnabled ? `BRAK` : `WYŁ.`, `---`, `---`], boxW) + gap;
+
+  drawBox(leftX, leftY, lastSonarContact && lastSonarContact.age < 18
+    ? [`${lastSonarContact.name}`, `NAMIAR ${lastSonarContact.bearing.toFixed(0).padStart(3, "0")}°`, `ODL. ${lastSonarContact.range} m`, `OD ECHA ${lastSonarContact.age.toFixed(1)} s`, lastSonarContact.predicted || "KURS ? ---"]
+    : [`SONAR KONTAKT`, sonar.on ? `BRAK` : `WYŁ.`, `---`, `---`], boxW);
+
+  const rightW = 210 * uiFontScale;
+  const rightX = game.width - rightW - 14;
+  let rightY = 12;
+  rightY = drawBox(rightX, rightY, [
+    `POGODA ${weatherEnabled ? weatherName(weather.rain) : "WYŁ."}`,
+    `WIATR ${radToCourse(weather.windDir).toFixed(0)}°`,
+    `${weather.windSpeed.toFixed(1)} m/s`,
+    `FALA ${weather.wave.toFixed(2)}`,
+    `WIDZ. ${Math.round(weather.visibility)} m`
+  ], rightW) + gap;
+
+  drawBox(rightX, rightY, [
+    `PROG. +5 MIN`,
+    weatherEnabled ? weatherName(forecast.rain) : "WYŁ.",
+    `WIATR ${radToCourse(forecast.windDir).toFixed(0)}°`,
+    `${forecast.windSpeed.toFixed(1)} m/s`,
+    `WIDZ. ${Math.round(forecast.visibility)} m`
+  ], rightW);
 }
 
 function drawBox(x, y, lines, width = 190) {
   ctx.save();
-  ctx.font = "bold 17px Courier New";
-  const height = 26 + lines.length * 22;
+  ctx.font = uiFont(17);
+  const lineH = uiPx(22);
+  const height = uiPx(26) + lines.length * lineH;
   ctx.fillStyle = "rgba(5,8,6,.72)";
   ctx.strokeStyle = "rgba(217,227,211,.42)";
-  roundRect(ctx, x, y, width, height, 8);
+  roundRect(ctx, x, y, width, height, uiPx(8));
   ctx.fill();
   ctx.stroke();
   lines.forEach((line, index) => {
     ctx.fillStyle = index ? "#c0cab8" : "#d9e3d3";
-    ctx.fillText(line, x + 10, y + 22 + index * 22);
+    ctx.fillText(line, x + uiPx(10), y + uiPx(22) + index * lineH);
   });
   ctx.restore();
+  return y + height;
 }
+
 
 function roundRect(context, x, y, width, height, radius) {
   context.beginPath();
@@ -1420,7 +2339,7 @@ function drawHud() {
   const text = `PRĘDKOŚĆ ${order.name} / ${(ship.speed * MS_TO_KNOT).toFixed(1)} w.   STER ${Math.abs(ship.rudder).toFixed(0)}° ${rudderSide}   KURS ${course}°`;
 
   ctx.save();
-  ctx.font = "bold 18px Courier New";
+  ctx.font = uiFont(18);
   const width = ctx.measureText(text).width + 32;
   const x = (game.width - width) / 2;
   const y = game.height - 52;
@@ -1479,7 +2398,7 @@ function drawScope(context, type) {
     context.restore();
 
     if (target.alive) drawScopeDot(context, cx, cy, target, range, r, color);
-    for (const plane of aircraft) drawScopeCross(context, cx, cy, plane, range, r, color);
+    if (aircraftEnabled) for (const plane of aircraft) drawScopeCross(context, cx, cy, plane, range, r, color);
   }
 
   if (type === "sonar" && sonar.on) {
@@ -1487,7 +2406,7 @@ function drawScope(context, type) {
   }
 
   context.fillStyle = color;
-  context.font = "12px Courier New";
+  context.font = `${Math.round(12 * uiFontScale)}px Courier New`;
   context.fillText(`${range} m`, 8, h - 10);
   context.restore();
 }
@@ -1529,8 +2448,103 @@ function drawShipPanel() {
   shipCtx.fillRect(0, 0, w, h);
   drawFletcher(shipCtx, w / 2, h / 2 - 2, ship.heading, Math.min(w, h) / 210);
   shipCtx.fillStyle = "#95a18f";
-  shipCtx.font = "12px Courier New";
+  shipCtx.font = `${Math.round(12 * uiFontScale)}px Courier New`;
   shipCtx.fillText(`WIATR ${radToCourse(weather.windDir).toFixed(0)}° / ${weather.windSpeed.toFixed(1)} m/s`, 8, h - 10);
+}
+
+
+function setActiveWeapon(name) {
+  activeWeapon = name;
+  lastMessage = name === "guns" ? "Aktywna broń: działa 5”/38." : "Aktywna broń: bomby głębinowe.";
+}
+
+function updateDepthChargeButtons() {
+  for (const btn of [dcLeftBtn, dcRightBtn, dcSternBtn, dcShallowBtn, dcMediumBtn, dcDeepBtn]) btn.classList.remove("active");
+  ({left: dcLeftBtn, right: dcRightBtn, stern: dcSternBtn}[dcLauncher] || dcSternBtn).classList.add("active");
+  ({30: dcShallowBtn, 90: dcMediumBtn, 180: dcDeepBtn}[dcDepth] || dcMediumBtn).classList.add("active");
+  dcRead.textContent = `Aktywna broń: ${activeWeapon === "guns" ? "działa 5”/38" : "bomby głębinowe"} | wyrzutnia: ${dcLauncher === "left" ? "lewa" : dcLauncher === "right" ? "prawa" : "tył"} | głębokość: ${dcDepth} m | zapas: ${resources.depthCharges}`;
+}
+
+function dropDepthCharge() {
+  ensureAudio();
+  if (resources.depthCharges <= 0) {
+    lastMessage = "Brak bomb głębinowych.";
+    return;
+  }
+  resources.depthCharges -= dcLauncher === "stern" ? 2 : 3;
+  resources.depthCharges = Math.max(0, resources.depthCharges);
+
+  const base = { x: ship.x - Math.cos(ship.heading) * 62, y: ship.y - Math.sin(ship.heading) * 62 };
+  const side = dcLauncher === "left" ? -1 : dcLauncher === "right" ? 1 : 0;
+  const count = dcLauncher === "stern" ? 2 : 3;
+  for (let i = 0; i < count; i++) {
+    const spread = (i - (count - 1) / 2) * 22;
+    const lateral = side * (dcLauncher === "stern" ? 12 : 95);
+    const x = base.x + Math.cos(ship.heading + Math.PI / 2) * (lateral + spread);
+    const y = base.y + Math.sin(ship.heading + Math.PI / 2) * (lateral + spread);
+    splashes.push({ x, y, t: 0, maxT: 2.4, hit: false, depthCharge: true, depth: dcDepth, delay: Math.max(0.7, dcDepth / 28) });
+  }
+  burst(0.16, 0.12, 180);
+  lastMessage = `Salwa bomb głębinowych: ${dcLauncher === "left" ? "lewa" : dcLauncher === "right" ? "prawa" : "tył"}, ${dcDepth} m.`;
+}
+
+function updateEngineSound() {
+  if (!audioCtx || !gameStarted || timeCompression === 0) {
+    if (engineGain && audioCtx) engineGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.08);
+    return;
+  }
+  const desired = Math.abs(speedOrders[ship.targetSpeedIndex].value) / speedOrders.at(-1).value;
+  if (!engineOsc) {
+    engineOsc = audioCtx.createOscillator();
+    engineGain = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+    engineOsc.type = "sawtooth";
+    filter.type = "lowpass";
+    filter.frequency.value = 140;
+    engineGain.gain.value = 0.0001;
+    engineOsc.connect(filter).connect(engineGain).connect(audioCtx.destination);
+    engineOsc.start();
+  }
+  const now = audioCtx.currentTime;
+  engineOsc.frequency.setTargetAtTime(34 + desired * 78, now, 0.20);
+  engineGain.gain.setTargetAtTime(0.015 + desired * 0.045, now, 0.25);
+}
+
+function explodeDepthCharge(splash) {
+  const p = worldToScreen(splash);
+  ctx.save();
+  ctx.strokeStyle = `rgba(210,240,255,${Math.max(0, 1 - splash.t / splash.maxT)})`;
+  ctx.fillStyle = `rgba(210,240,255,${Math.max(0, .20 - splash.t / splash.maxT * .20)})`;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 18 + splash.t * 34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function updateResourcePanel() {
+  updateDepthChargeButtons();
+  resourceRead.innerHTML = `
+    <div class="resourceRow"><span>Paliwo</span><strong>${resources.fuel.toFixed(1)}%</strong></div>
+    <div class="resourceBar"><span style="width:${resources.fuel}%"></span></div>
+    <div class="resourceRow"><span>Amunicja 5”/38</span><strong>${resources.ammo5} szt.</strong></div>
+    <div class="resourceRow"><span>Amunicja AA</span><strong>${resources.ammoAA} szt.</strong></div>
+    <div class="resourceRow"><span>Bomby głębinowe</span><strong>${resources.depthCharges} szt.</strong></div>
+    <div class="resourceRow"><span>Zmęczenie załogi</span><strong>${resources.crewFatigue.toFixed(1)}%</strong></div>
+    <div class="resourceBar"><span style="width:${resources.crewFatigue}%"></span></div>
+    <div class="resourceRow"><span>Zużycie maszyn</span><strong>${resources.engineWear.toFixed(1)}%</strong></div>
+    <div class="resourceRow"><span>Morale</span><strong>${resources.morale.toFixed(0)}%</strong></div>
+    <div class="resourceRow"><span>Kompresja czasu</span><strong>${timeCompression === 0 ? "PAUZA" : timeCompression + "×"}</strong></div>`;
+}
+
+function updateTutorialProgress() {
+  if (!tutorialMode || tutorialStep !== 1 || tutorialStep1Complete) return;
+  if (Math.abs(ship.speed) > 0.6 && Math.abs(ship.rudder) > 4) {
+    tutorialStep1Complete = true;
+    lastMessage = "Dobrze. Zmieniono prędkość i wychylono ster — możesz przejść dalej.";
+    showTutorialStep();
+  }
 }
 
 function updateUI() {
@@ -1549,6 +2563,8 @@ function updateUI() {
   rudderRead.textContent = `${Math.abs(ship.rudder).toFixed(0)}° ${rudderSide}`;
   courseRead.textContent = `${course.toFixed(0).padStart(3, "0")}°`;
   windShort.textContent = `${radToCourse(weather.windDir).toFixed(0)}° ${weather.windSpeed.toFixed(0)}m/s`;
+  dayNightRead.textContent = formatClock();
+  updateResourcePanel();
 
   weaponRead.innerHTML =
     `TRYB: <span style="color:var(--guns)">${guns.mode}</span><br>` +
@@ -1559,29 +2575,35 @@ function updateUI() {
     `<button id="autoFireButton" class="tinyButton">${autoFire ? "AUTO OGNIA: WŁ." : "AUTO OGNIA: WYŁ."}</button>`;
 
   consolePanel.textContent =
-    `Fletcher: max 37 w. | Condor: ${Math.round(aircraft[0].speed * MS_TO_KNOT)} w. | Radar: obrotowa kreska | Morze: Atlantyk\n` +
-    `Sterowanie: W/S/+/- prędkość, A/D ster, G wpis kurs/kąt, F auto/manual, R reset dział, < > obrót, O/L zasięg, [ ] sonar, Spacja strzał\n` +
-    `${lastMessage}`;
+    `Fletcher: max 37 w. | Condor: ${aircraft[0] ? Math.round(aircraft[0].speed * MS_TO_KNOT) : "---"} w. | Radar: obrotowa kreska | Morze: Atlantyk\n` +
+    `Sterowanie: W/S/+/- prędkość, A/D ster, N plan kursu, V auto-trasa, B kasuj punkty, G wpis kurs/kąt, F auto/manual, R reset dział, < > obrót, O/L zasięg, [ ] sonar, Spacja strzał\n` +
+    `${lastMessage} | Auto-trasa: ${navFollowEnabled ? "WŁ." : "WYŁ."}`;
 }
 
 function loop(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
   weather.t += dt;
+  updateClockAndResources(dt);
+  const simDt = dt * timeCompression;
+  updateWeather(dt);
 
   if (gameStarted) {
-    updateOrders(dt);
-    updateAutoFire(dt);
-    updatePhysics(dt);
-    updateWakeSmoke(dt);
-    updateTargets(dt);
-    updateSonar(dt);
-    updateRadar(dt);
-    updateProjectiles(dt);
+    updateOrders(simDt);
+    updateNavigationPlan();
+    updateAutoFire(simDt);
+    updatePhysics(simDt);
+    updateWakeSmoke(simDt);
+    updateTargets(simDt);
+    updateSonar(simDt);
+    updateRadar(simDt);
+    updateProjectiles(simDt);
   }
 
   draw();
+  updateTutorialProgress();
   updateUI();
+  updateEngineSound();
   requestAnimationFrame(loop);
 }
 

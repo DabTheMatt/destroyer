@@ -12,18 +12,106 @@
       <div class="menuShade"></div>
       <section class="menuPanel">
         <div class="gameTitle">U-BOOTY<br><span>i NISZCZYCIELE</span></div>
-        <button id="newGameBtn" class="mainMenuButton primary">▶ NOWA GRA</button>
+        <div class="titleInfo leftInfo"><div class="titleInfoHeader">USS FLETCHER</div><div>Prędkość: 37 w.</div><div>Uzbrojenie: 5 × 5”/38</div><div>Radar + sonar QC</div></div>
+        <div class="titleInfo rightInfo"><div class="titleInfoHeader">ATLANTYK 1943</div><div>Eskorta konwoju</div><div>Kontakty nawodne i podwodne</div><div>Radar z obrotową kreską</div></div>
+        <button id="resumeGameBtn" class="mainMenuButton primary hidden">↩ POWRÓĆ DO GRY</button>
+        <button id="newGameBtn" class="mainMenuButton">▶ NOWA GRA</button>
+        <button id="tutorialBtn" class="mainMenuButton">▣ TUTORIAL</button>
         <button id="optionsBtn" class="mainMenuButton">⚙ OPCJE</button>
-        <button id="exitBtn" class="mainMenuButton">▣ WYJDŹ Z GRY</button>
+        <button id="exitBtn" class="mainMenuButton">▣ ZAKOŃCZ GRĘ</button>
+        <div id="tutorialPanel" class="tutorialPanel hidden">
+          <label class="captainNameLabel">IMIĘ / PSEUDONIM KAPITANA</label>
+          <input id="captainNameInput" class="captainNameInput" type="text" placeholder="np. Nowak, Anna, Wilk" maxlength="24" />
+          <div class="tutorialTitle">MISJE TRENINGOWE</div>
+          <button id="trainingMission1Btn" class="trainingMissionBtn">1. Sterowanie okrętem</button>
+          <button class="trainingMissionBtn disabled">2. Nawigacja po punktach</button>
+          <button class="trainingMissionBtn disabled">3. Radar i identyfikacja kontaktów</button>
+          <button class="trainingMissionBtn disabled">4. Sonar i U-Booty</button>
+          <button class="trainingMissionBtn disabled">5. Ogień artyleryjski i bomby głębinowe</button>
+        </div>
+
         <div id="optionsPanel" class="optionsPanel hidden">
-          <label>SKALA CZCIONEK UI <span id="fontScaleValue">100%</span></label>
-          <input id="fontScaleSlider" type="range" min="85" max="140" step="5" value="100" />
+          <label>SKALA CZCIONEK UI <span id="fontScaleValue">150%</span></label>
+          <input id="fontScaleSlider" type="range" min="85" max="200" step="5" value="150" />
+          <div class="optionChecks">
+            <label><input id="weatherToggle" type="checkbox" checked /> POGODA: WŁ.</label>
+            <label><input id="aircraftToggle" type="checkbox" checked /> SAMOLOTY: WŁ.</label>
+          </div>
         </div>
       </section>
     </div>
-
-    <button id="windBtn" class="mapButton on">WIATR: WŁ.</button>
-    <button id="infoBtn" class="mapButton right on">INFO: WŁ.</button>
+    <div id="mapMenuBar" class="mapMenuBar">
+      <button id="menuBtn" class="mapButtonBar">MENU</button>
+      <button id="shipResourceBtn" class="mapButtonBar">FLETCHER</button>
+      <button id="windBtn" class="mapButtonBar on">WIATR: WŁ.</button>
+      <button id="infoBtn" class="mapButtonBar on">INFO: WŁ.</button>
+      <button id="seaBtn" class="mapButtonBar on">FALE: WŁ.</button>
+    </div>
+    <div id="timeControls" class="timeControls">
+      <span id="dayNightRead">DZIEŃ 12:00</span>
+      <button id="pauseTimeBtn">PAUZA</button>
+      <button id="timeHalfBtn">0.5×</button>
+      <button id="time1Btn">1×</button>
+      <button id="time2Btn">2×</button>
+      <button id="time4Btn">4×</button>
+      <button id="time10Btn">10×</button>
+    </div>
+    <div id="resourcePanel" class="resourcePanel hidden">
+      <div class="resourceHeader"><strong>USS FLETCHER — ZASOBY</strong><button id="closeResourceBtn">×</button></div>
+      <div class="resourceBody">
+        <div class="fletcherSideSvg"><svg viewBox="0 0 1100 220" xmlns="http://www.w3.org/2000/svg">
+          <defs><linearGradient id="hullG" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#9fb0af"/><stop offset=".55" stop-color="#6f7f7e"/><stop offset="1" stop-color="#334144"/></linearGradient></defs>
+          <path d="M35 126 L90 103 L810 100 L1040 119 L990 142 L145 151 L60 143 Z" fill="url(#hullG)" stroke="#d8e3d4" stroke-width="3"/>
+          <path d="M85 146 L995 138 L965 164 L160 172 L60 155 Z" fill="#513d31" opacity=".82"/>
+          <path d="M80 104 L160 93 L805 92 L1012 112" fill="none" stroke="#cfd8d2" stroke-width="3"/>
+          <rect x="285" y="82" width="220" height="28" fill="#b5c1ba" stroke="#3d4c4d"/>
+          <rect x="475" y="54" width="92" height="44" fill="#c6cec7" stroke="#3d4c4d"/>
+          <rect x="540" y="40" width="55" height="60" fill="#b8c2bd" stroke="#3d4c4d"/>
+          <rect x="355" y="55" width="42" height="58" fill="#7c8985" stroke="#3d4c4d"/>
+          <rect x="650" y="57" width="50" height="52" fill="#7c8985" stroke="#3d4c4d"/>
+          <g stroke="#d8e3d4" stroke-width="4">
+            <line x1="560" y1="45" x2="560" y2="8"/><line x1="560" y1="18" x2="515" y2="5"/><line x1="560" y1="18" x2="605" y2="5"/>
+            <line x1="720" y1="66" x2="720" y2="28"/><line x1="720" y1="35" x2="754" y2="25"/>
+          </g>
+          <g fill="#d9dfd8" stroke="#0b100d" stroke-width="3">
+            <rect x="135" y="84" width="45" height="24" rx="5"/><line x1="180" y1="92" x2="245" y2="84"/>
+            <rect x="245" y="78" width="48" height="26" rx="5"/><line x1="293" y1="87" x2="360" y2="80"/>
+            <rect x="785" y="82" width="54" height="28" rx="5"/><line x1="785" y1="92" x2="720" y2="83"/>
+            <rect x="890" y="91" width="54" height="28" rx="5"/><line x1="890" y1="101" x2="825" y2="92"/>
+            <rect x="974" y="107" width="44" height="22" rx="5"/><line x1="974" y1="115" x2="930" y2="110"/>
+          </g>
+          <g stroke="#cfd8d2" stroke-width="2" opacity=".75">
+            <line x1="180" y1="94" x2="180" y2="75"/><line x1="245" y1="84" x2="245" y2="67"/><line x1="330" y1="82" x2="330" y2="64"/>
+            <line x1="820" y1="86" x2="820" y2="68"/><line x1="920" y1="96" x2="920" y2="78"/>
+            <line x1="560" y1="8" x2="690" y2="95"/><line x1="560" y1="8" x2="400" y2="95"/>
+          </g>
+          <text x="875" y="142" font-family="Courier New" font-size="34" fill="#dfe8e0">445</text>
+        </svg></div>
+        <div id="resourceRead" class="resourceRead"></div>
+        <div id="depthChargePanel" class="depthChargePanel">
+          <div class="dcTitle">BOMBY GŁĘBINOWE</div>
+          <div class="dcGrid">
+            <button id="dcLeftBtn" class="dcButton">LEWA K-GUN</button>
+            <button id="dcRightBtn" class="dcButton">PRAWA K-GUN</button>
+            <button id="dcSternBtn" class="dcButton">TYLNE RACKI</button>
+          </div>
+          <div class="dcGrid">
+            <button id="dcShallowBtn" class="dcButton">PŁYTKO 30 m</button>
+            <button id="dcMediumBtn" class="dcButton">ŚREDNIO 90 m</button>
+            <button id="dcDeepBtn" class="dcButton">GŁĘBOKO 180 m</button>
+          </div>
+          <div id="dcRead" class="dcRead">Aktywna broń: działa 5”/38</div>
+        </div>
+      </div>
+    </div>
+    <div id="tutorialPrompt" class="tutorialPrompt hidden">
+      <div id="tutorialText" class="tutorialText"></div>
+      <div class="tutorialActions">
+        <button id="tutorialPrevBtn">WSTECZ</button>
+        <button id="tutorialNextBtn">DALEJ</button>
+        <button id="tutorialCloseBtn">ZAMKNIJ</button>
+      </div>
+    </div>
     <canvas id="game"></canvas>
   </main>
 

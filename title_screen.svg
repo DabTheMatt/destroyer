@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#08151d"/>
+      <stop offset=".52" stop-color="#183542"/>
+      <stop offset="1" stop-color="#07131a"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1=".35" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b515d"/>
+      <stop offset=".55" stop-color="#14313c"/>
+      <stop offset="1" stop-color="#06131a"/>
+    </linearGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="5"/></filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <g opacity=".18" fill="#d6dde0">
+    <ellipse cx="220" cy="155" rx="210" ry="38"/>
+    <ellipse cx="1080" cy="120" rx="280" ry="46"/>
+    <ellipse cx="1320" cy="210" rx="220" ry="34"/>
+  </g>
+  <rect y="430" width="1600" height="470" fill="url(#sea)"/>
+  <path d="M0 435 C160 415 240 455 410 430 C600 405 770 460 950 430 C1160 395 1330 455 1600 420 L1600 900 L0 900 Z" fill="#163a46" opacity=".62"/>
+  <g opacity=".32" stroke="#b8d3d9" stroke-width="2" fill="none">
+    <path d="M70 520 q45 -16 90 0"/>
+    <path d="M290 580 q60 -18 120 0"/>
+    <path d="M520 500 q45 -14 90 0"/>
+    <path d="M900 610 q80 -24 160 0"/>
+    <path d="M1210 530 q55 -18 110 0"/>
+    <path d="M1380 680 q60 -18 120 0"/>
+  </g>
+
+  <g transform="translate(765 475) scale(5.1)" filter="url(#blur)" opacity=".22">
+    <path d="M58 0 L42 -8 L-45 -9 L-69 0 L-45 9 L42 8 Z" fill="#000"/>
+  </g>
+  <g transform="translate(765 460) scale(5.1)">
+    <path d="M58 0 L42 -8 L-45 -9 L-69 0 L-45 9 L42 8 Z" fill="#7f8b83" stroke="#111b18" stroke-width="1.4"/>
+    <rect x="-42" y="-4.8" width="82" height="9.6" fill="#aab3a7"/>
+    <rect x="11" y="-6.5" width="19" height="13" fill="#c0c7bd"/>
+    <rect x="-28" y="-4.5" width="9" height="9" fill="#747f76"/>
+    <rect x="-38" y="-4.2" width="7" height="8.4" fill="#747f76"/>
+    <g stroke="#d9e3d3" stroke-width=".9">
+      <line x1="20" y1="0" x2="20" y2="-23"/>
+      <line x1="20" y1="-12" x2="9" y2="-18"/>
+      <line x1="20" y1="-12" x2="31" y2="-18"/>
+    </g>
+    <g fill="#d7ddd1" stroke="#111b18" stroke-width=".7">
+      <circle cx="46" cy="0" r="3.2"/><line x1="46" y1="0" x2="58" y2="0"/>
+      <circle cx="30" cy="0" r="3.2"/><line x1="30" y1="0" x2="42" y2="0"/>
+      <circle cx="-18" cy="0" r="3.2"/><line x1="-18" y1="0" x2="-6" y2="0"/>
+      <circle cx="-39" cy="0" r="3.2"/><line x1="-39" y1="0" x2="-27" y2="0"/>
+      <circle cx="-55" cy="0" r="3.2"/><line x1="-55" y1="0" x2="-43" y2="0"/>
+    </g>
+  </g>
+</svg>

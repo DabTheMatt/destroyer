@@ -1,23 +1,11 @@
-# U-Booty i Niszczyciele — v12
+# U-Booty i Niszczyciele — v30
 
-Poprawione względem v11:
-- gra startuje poprawnie,
-- działa strzelanie z armat: spacja odpala pojedyncze gotowe działo, nie całą idealnie zsynchronizowaną salwę,
-- każde działo ma własny reload i sektor ostrzału,
-- przednie działa nie strzelają przez rufę,
-- R resetuje ustawienie dział na kurs okrętu,
-- morze ma ciemniejszą, bardziej atlantycką paletę,
-- fale są krótkimi segmentami, bez obrysów przypominających okręty,
-- czerwone pociski i smugi AA,
-- prosty model obrażeń:
-  - frachtowiec: 100 HP, zwykle 2–3 trafienia 5”/38,
-  - Condor: 24 HP, zwykle 2–4 skuteczne trafienia/serie 40 mm,
-- maksymalny zoom zwiększony,
-- radar na mapie: obracająca się kreska zamiast rozchodzących się kręgów,
-- echo radarowe pojawia się, gdy kreska przechodzi przez kontakt.
-
-Pliki:
-- index.html
-- style.css
-- game.js
-- README.md
+Zmiany:
+- WIATR/INFO/FALE wymuszone w prawym dolnym rogu mapy,
+- komunikat tutorialu przesunięty wyżej,
+- klawisz Numpad2 służy do wpisywania kursu; zwykłe 2 przełącza bomby głębinowe,
+- słońce/księżyc bliżej krawędzi i bez szerokiej poświaty,
+- domyślne skalowanie UI: 150%,
+- tutorial ma dodatkową pierwszą planszę o niszczycielu Fletcher,
+- gracz wpisuje imię/pseudonim i tutorial zwraca się do niego: „kapitanie …”,
+- test składni i test startowy wykonane przy 150%.
