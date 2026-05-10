@@ -1,35 +1,166 @@
 * { box-sizing: border-box; }
+
 :root {
-  --bg:#071118; --panel:#0d1514; --panel2:#07100d; --line:#385057;
-  --text:#d9e3d3; --muted:#95a18f; --sonar:#6fe25d; --radar:#4ab6ff;
-  --guns:#d9aa2a; --wind:#c0cab8;
+  --bg:#061017;
+  --panel:#0d1514;
+  --panel2:#07100d;
+  --line:#385057;
+  --text:#d9e3d3;
+  --muted:#95a18f;
+  --sonar:#6fe25d;
+  --radar:#4ab6ff;
+  --guns:#d9aa2a;
+  --wind:#c0cab8;
 }
+
 body {
-  margin:0; height:100vh; overflow:hidden; background:var(--bg); color:var(--text);
+  margin:0;
+  height:100vh;
+  overflow:hidden;
+  background:var(--bg);
+  color:var(--text);
   font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-  display:grid; grid-template-columns:minmax(0,1fr) clamp(195px,20vw,255px);
-  grid-template-rows:minmax(0,1fr) auto; gap:5px; padding:5px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) clamp(195px,20vw,255px);
+  grid-template-rows:minmax(0,1fr) auto;
+  gap:5px;
+  padding:5px;
 }
-#gameWrap { position:relative; min-width:0; min-height:0; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#0d2029; }
-#game { width:100%; height:100%; display:block; background:#102833; cursor:default; }
+
+#gameWrap {
+  position:relative;
+  min-width:0;
+  min-height:0;
+  border:1px solid var(--line);
+  border-radius:10px;
+  overflow:hidden;
+  background:#0d2029;
+}
+
+#game {
+  width:100%;
+  height:100%;
+  display:block;
+  background:#102833;
+  cursor:default;
+}
+
 #game.dragging { cursor:grabbing; }
 #game.aiming { cursor:crosshair; }
+
 .mapButton {
-  position:absolute; z-index:10; top:12px; left:50%; transform:translateX(-50%);
-  background:rgba(5,8,6,.78); border:1px solid currentColor; border-radius:8px;
-  color:var(--wind); font-family:"Courier New",monospace; font-size:13px; padding:6px 10px; cursor:pointer;
+  position:absolute;
+  z-index:10;
+  top:12px;
+  left:50%;
+  transform:translateX(-50%);
+  background:rgba(5,8,6,.78);
+  border:1px solid currentColor;
+  border-radius:8px;
+  color:var(--wind);
+  font-family:"Courier New",monospace;
+  font-size:13px;
+  padding:6px 10px;
+  cursor:pointer;
+  user-select:none;
 }
+
 .mapButton.left { transform:translateX(-170%); color:var(--radar); }
 .mapButton.right { transform:translateX(70%); color:var(--guns); }
 .mapButton:not(.on) { opacity:.45; }
-aside { min-width:0; min-height:0; display:grid; grid-template-rows:1fr 1fr 1fr auto auto; gap:5px; }
-.panel { min-height:0; background:linear-gradient(180deg,#101a19,#050908); border:1px solid var(--line); border-radius:9px; padding:6px; overflow:hidden; }
-.panelTitle { font-family:"Courier New",monospace; font-size:12px; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center; gap:4px; }
-.statusOn { color:var(--sonar); } .statusOff { color:#6d756b; }
-.scopeCanvas,#shipView { width:100%; height:calc(100% - 20px); display:block; background:#030706; border:1px solid #253027; border-radius:7px; }
-.miniControls { display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; min-height:70px; }
-.controlCard { background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:6px 4px; font-family:"Courier New",monospace; font-size:11px; text-align:center; }
+
+aside {
+  min-width:0;
+  min-height:0;
+  display:grid;
+  grid-template-rows:1fr 1fr 1fr auto auto;
+  gap:5px;
+}
+
+.panel {
+  min-height:0;
+  background:linear-gradient(180deg,#101a19,#050908);
+  border:1px solid var(--line);
+  border-radius:9px;
+  padding:6px;
+  overflow:hidden;
+}
+
+.panelTitle {
+  font-family:"Courier New",monospace;
+  font-size:12px;
+  margin-bottom:4px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:4px;
+}
+
+.statusOn { color:var(--sonar); }
+.statusOff { color:#6d756b; }
+
+.scopeCanvas,#shipView {
+  width:100%;
+  height:calc(100% - 20px);
+  display:block;
+  background:#030706;
+  border:1px solid #253027;
+  border-radius:7px;
+}
+
+.miniControls {
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:5px;
+  min-height:70px;
+}
+
+.controlCard {
+  background:var(--panel2);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:6px 4px;
+  font-family:"Courier New",monospace;
+  font-size:11px;
+  text-align:center;
+}
+
 .bigVal { color:var(--sonar); font-size:15px; margin-top:4px; }
-.tinyButton { background:#111b18; border:1px solid var(--line); border-radius:5px; color:var(--sonar); font-family:"Courier New",monospace; font-size:10px; padding:2px 5px; cursor:pointer; }
-.weaponControls { min-height:90px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:7px; font-family:"Courier New",monospace; font-size:11px; color:var(--muted); line-height:1.25; }
-#console { grid-column:1/3; min-height:78px; max-height:116px; overflow:hidden; background:linear-gradient(180deg,#101a19,#050908); border:1px solid var(--line); border-radius:9px; padding:8px 10px; font-family:"Courier New",monospace; white-space:pre-wrap; line-height:1.2; font-size:clamp(11px,1.08vw,14px); }
+
+.tinyButton {
+  background:#111b18;
+  border:1px solid var(--line);
+  border-radius:5px;
+  color:var(--sonar);
+  font-family:"Courier New",monospace;
+  font-size:10px;
+  padding:2px 5px;
+  cursor:pointer;
+}
+
+.weaponControls {
+  min-height:92px;
+  background:var(--panel2);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:7px;
+  font-family:"Courier New",monospace;
+  font-size:11px;
+  color:var(--muted);
+  line-height:1.25;
+}
+
+#console {
+  grid-column:1/3;
+  min-height:78px;
+  max-height:116px;
+  overflow:hidden;
+  background:linear-gradient(180deg,#101a19,#050908);
+  border:1px solid var(--line);
+  border-radius:9px;
+  padding:8px 10px;
+  font-family:"Courier New",monospace;
+  white-space:pre-wrap;
+  line-height:1.2;
+  font-size:clamp(11px,1.08vw,14px);
+}

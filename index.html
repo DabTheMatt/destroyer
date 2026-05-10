@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>U-Booty i Niszczyciele — v11</title>
+  <title>U-Booty i Niszczyciele — v12</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -16,24 +16,33 @@
 
   <aside>
     <section class="panel">
-      <div class="panelTitle"><span>SONAR</span><button id="sonarButton" class="tinyButton">WŁĄCZ</button><span id="sonarStatus" class="statusOff">WYŁ.</span></div>
+      <div class="panelTitle">
+        <span>SONAR</span>
+        <button id="sonarButton" class="tinyButton">WŁĄCZ</button>
+        <span id="sonarStatus" class="statusOff">WYŁ.</span>
+      </div>
       <canvas id="sonar" class="scopeCanvas"></canvas>
     </section>
+
     <section class="panel">
       <div class="panelTitle"><span>RADAR</span><span id="radarStatus" class="statusOn">WŁ.</span></div>
       <canvas id="radar" class="scopeCanvas"></canvas>
     </section>
+
     <section class="panel">
       <div class="panelTitle"><span>NISZCZYCIEL / FLETCHER</span><span id="windShort">WIATR</span></div>
       <canvas id="shipView"></canvas>
     </section>
+
     <section class="miniControls">
       <div class="controlCard">PRĘDKOŚĆ<div id="speedRead" class="bigVal">STOP</div></div>
       <div class="controlCard">STER<div id="rudderRead" class="bigVal">0°</div></div>
       <div class="controlCard">KURS<div id="courseRead" class="bigVal">000°</div></div>
     </section>
+
     <section class="weaponControls" id="weaponRead"></section>
   </aside>
+
   <div id="console"></div>
   <script src="game.js"></script>
 </body>
