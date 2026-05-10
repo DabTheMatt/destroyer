@@ -15,7 +15,14 @@ const consolePanel = document.getElementById("console");
 const sonarButton = document.getElementById("sonarButton");
 const sonarStatus = document.getElementById("sonarStatus");
 const radarStatus = document.getElementById("radarStatus");
-const radarBtn = document.getElementById("radarBtn");
+const radarButton = document.getElementById("radarButton");
+const startMenu = document.getElementById("startMenu");
+const newGameBtn = document.getElementById("newGameBtn");
+const optionsBtn = document.getElementById("optionsBtn");
+const exitBtn = document.getElementById("exitBtn");
+const optionsPanel = document.getElementById("optionsPanel");
+const fontScaleSlider = document.getElementById("fontScaleSlider");
+const fontScaleValue = document.getElementById("fontScaleValue");
 const windBtn = document.getElementById("windBtn");
 const infoBtn = document.getElementById("infoBtn");
 const speedRead = document.getElementById("speedRead");
@@ -104,6 +111,8 @@ let angleInput = "";
 let lastMessage = "Gotowy.";
 let windLayerOn = true;
 let infoOn = true;
+let gameStarted = false;
+let autoFire = false;
 let audioCtx = null;
 let lastTime = performance.now();
 let wakeBuild = 0;
@@ -136,10 +145,30 @@ function bindEvents() {
     sonar.ping = 0;
   });
 
-  radarBtn.addEventListener("click", () => {
+  radarButton.addEventListener("click", () => {
     radar.on = !radar.on;
-    radarBtn.textContent = radar.on ? "RADAR: WŁ." : "RADAR: WYŁ.";
-    radarBtn.classList.toggle("on", radar.on);
+    radarButton.textContent = radar.on ? "WYŁĄCZ" : "WŁĄCZ";
+  });
+
+  newGameBtn.addEventListener("click", () => {
+    startMenu.classList.add("hidden");
+    gameStarted = true;
+    lastMessage = "Nowa gra rozpoczęta.";
+  });
+
+  optionsBtn.addEventListener("click", () => {
+    optionsPanel.classList.toggle("hidden");
+  });
+
+  exitBtn.addEventListener("click", () => {
+    lastMessage = "Wyjście z gry: zamknij kartę przeglądarki.";
+    try { window.close(); } catch (error) {}
+  });
+
+  fontScaleSlider.addEventListener("input", () => {
+    const value = Number(fontScaleSlider.value);
+    document.documentElement.style.setProperty("--ui-scale", String(value / 100));
+    fontScaleValue.textContent = `${value}%`;
   });
 
   windBtn.addEventListener("click", () => {
@@ -198,6 +227,14 @@ function bindEvents() {
   game.addEventListener("dblclick", () => {
     camera.manualOffsetX = 0;
     camera.manualOffsetY = 0;
+  });
+
+  weaponRead.addEventListener("click", (event) => {
+    if (event.target && event.target.id === "autoFireButton") {
+      autoFire = !autoFire;
+      guns.mode = autoFire ? "AUTO" : "MANUAL";
+      lastMessage = autoFire ? "Automatyczne prowadzenie ognia włączone." : "Automatyczne prowadzenie ognia wyłączone.";
+    }
   });
 
   window.addEventListener("keydown", onKeyDown);
@@ -421,6 +458,22 @@ function updateOrders(dt) {
   }
 }
 
+
+function updateAutoFire(dt) {
+  if (!autoFire || !target.alive) return;
+  guns.mode = "AUTO";
+  const desired = angleToPoint(ship, target);
+  guns.bearing += clamp(angleDiffRad(desired, guns.bearing), -guns.turnRate * dt, guns.turnRate * dt);
+
+  const aimError = Math.abs(angleDiffRad(desired, guns.bearing));
+  const range = dist(ship, target);
+  guns.range += clamp(range - guns.range, -700 * dt, 700 * dt);
+
+  if (aimError < degToRad(2.5) && range >= guns.minRange && range <= guns.maxRange) {
+    fireGuns();
+  }
+}
+
 function updatePhysics(dt) {
   const targetSpeed = speedOrders[ship.targetSpeedIndex].value;
   const accel = Math.abs(targetSpeed) > Math.abs(ship.speed) ? 0.55 : 0.82;
@@ -476,8 +529,8 @@ function updateTargets(dt) {
 
   for (let index = 0; index < aircraft.length; index++) {
     const plane = aircraft[index];
-    plane.x += Math.cos(plane.heading) * plane.speed * dt * SIM_SPEED;
-    plane.y += Math.sin(plane.heading) * plane.speed * dt * SIM_SPEED;
+    plane.x += Math.cos(plane.heading) * plane.speed * dt * 2.2;
+    plane.y += Math.sin(plane.heading) * plane.speed * dt * 2.2;
     if (dist(plane, ship) > 18000 || plane.hp <= 0) Object.assign(plane, makeCondor(index));
     updateAA(plane, dt);
   }
@@ -1295,15 +1348,18 @@ function drawFletcher(context, x, y, heading, scale = 1) {
   context.fillRect(-28, -4.5, 9, 9);
   context.fillRect(-38, -4.2, 7, 8.4);
 
-  for (const turret of turrets) drawTurret(context, turret.x, turret.y, guns.bearing - heading, scale);
+  for (const turret of turrets) drawTurret(context, turret, guns.bearing - heading, scale);
   context.restore();
 }
 
-function drawTurret(context, x, y, angle, scale) {
+function drawTurret(context, turret, angle, scale) {
   context.save();
-  context.translate(x, y);
+  context.translate(turret.x, turret.y);
   context.rotate(angle);
-  context.fillStyle = "#d7ddd1";
+  const cool = clamp(turret.reload / turret.baseReload, 0, 1);
+  const red = Math.round(80 + 175 * cool);
+  const green = Math.round(220 - 150 * cool);
+  context.fillStyle = `rgb(${red},${green},60)`;
   context.strokeStyle = "#0b100d";
   context.lineWidth = 1 / Math.max(scale, 0.1);
   context.beginPath();
@@ -1487,6 +1543,7 @@ function updateUI() {
   sonarButton.textContent = sonar.on ? "WYŁĄCZ" : "WŁĄCZ";
   radarStatus.textContent = radar.on ? "WŁ." : "WYŁ.";
   radarStatus.className = radar.on ? "statusOn" : "statusOff";
+  radarButton.textContent = radar.on ? "WYŁĄCZ" : "WŁĄCZ";
 
   speedRead.textContent = order.name;
   rudderRead.textContent = `${Math.abs(ship.rudder).toFixed(0)}° ${rudderSide}`;
@@ -1498,7 +1555,8 @@ function updateUI() {
     `KĄT: <span style="color:var(--guns)">${radToCourse(guns.bearing).toFixed(0).padStart(3, "0")}°</span><br>` +
     `ZASIĘG: <span style="color:var(--guns)">${Math.round(guns.range)} m</span><br>` +
     `CEL HP: <span style="color:var(--guns)">${target.alive ? Math.round(target.hp) : "---"}</span><br>` +
-    `5”/38: zwykle 2–3 trafienia`;
+    `5”/38: zwykle 2–3 trafienia<br>` +
+    `<button id="autoFireButton" class="tinyButton">${autoFire ? "AUTO OGNIA: WŁ." : "AUTO OGNIA: WYŁ."}</button>`;
 
   consolePanel.textContent =
     `Fletcher: max 37 w. | Condor: ${Math.round(aircraft[0].speed * MS_TO_KNOT)} w. | Radar: obrotowa kreska | Morze: Atlantyk\n` +
@@ -1511,13 +1569,16 @@ function loop(now) {
   lastTime = now;
   weather.t += dt;
 
-  updateOrders(dt);
-  updatePhysics(dt);
-  updateWakeSmoke(dt);
-  updateTargets(dt);
-  updateSonar(dt);
-  updateRadar(dt);
-  updateProjectiles(dt);
+  if (gameStarted) {
+    updateOrders(dt);
+    updateAutoFire(dt);
+    updatePhysics(dt);
+    updateWakeSmoke(dt);
+    updateTargets(dt);
+    updateSonar(dt);
+    updateRadar(dt);
+    updateProjectiles(dt);
+  }
 
   draw();
   updateUI();

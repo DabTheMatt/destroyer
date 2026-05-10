@@ -1,6 +1,7 @@
 * { box-sizing: border-box; }
 
 :root {
+  --ui-scale: 1;
   --bg:#061017;
   --panel:#0d1514;
   --panel2:#07100d;
@@ -59,7 +60,7 @@ body {
   border-radius:8px;
   color:var(--wind);
   font-family:"Courier New",monospace;
-  font-size:13px;
+  font-size:calc(13px * var(--ui-scale));
   padding:6px 10px;
   cursor:pointer;
   user-select:none;
@@ -88,7 +89,7 @@ aside {
 
 .panelTitle {
   font-family:"Courier New",monospace;
-  font-size:12px;
+  font-size:calc(12px * var(--ui-scale));
   margin-bottom:4px;
   display:flex;
   justify-content:space-between;
@@ -121,11 +122,11 @@ aside {
   border-radius:8px;
   padding:6px 4px;
   font-family:"Courier New",monospace;
-  font-size:11px;
+  font-size:calc(11px * var(--ui-scale));
   text-align:center;
 }
 
-.bigVal { color:var(--sonar); font-size:15px; margin-top:4px; }
+.bigVal { color:var(--sonar); font-size:calc(15px * var(--ui-scale)); margin-top:4px; }
 
 .tinyButton {
   background:#111b18;
@@ -133,7 +134,7 @@ aside {
   border-radius:5px;
   color:var(--sonar);
   font-family:"Courier New",monospace;
-  font-size:10px;
+  font-size:calc(10px * var(--ui-scale));
   padding:2px 5px;
   cursor:pointer;
 }
@@ -145,7 +146,7 @@ aside {
   border-radius:8px;
   padding:7px;
   font-family:"Courier New",monospace;
-  font-size:11px;
+  font-size:calc(11px * var(--ui-scale));
   color:var(--muted);
   line-height:1.25;
 }
@@ -163,4 +164,91 @@ aside {
   white-space:pre-wrap;
   line-height:1.2;
   font-size:clamp(11px,1.08vw,14px);
+}
+
+
+.startMenu {
+  position:absolute;
+  inset:0;
+  z-index:30;
+  background:#071923 url("title_screen.png") center/cover no-repeat;
+  display:flex;
+  align-items:flex-end;
+  justify-content:flex-start;
+  padding:clamp(24px,4vw,56px);
+}
+
+.startMenu.hidden { display:none; }
+
+.menuShade {
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg, rgba(0,0,0,.72), rgba(0,0,0,.24) 58%, rgba(0,0,0,.45));
+  pointer-events:none;
+}
+
+.menuPanel {
+  position:relative;
+  z-index:1;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  width:min(360px, 40vw);
+}
+
+.gameTitle {
+  font-family:"Courier New",monospace;
+  font-weight:900;
+  line-height:.9;
+  letter-spacing:1px;
+  font-size:clamp(34px,5vw,68px);
+  color:#d9e3d3;
+  text-shadow:0 3px 0 #061017, 0 0 18px rgba(0,0,0,.9);
+  margin-bottom:12px;
+}
+
+.gameTitle span {
+  font-size:.72em;
+}
+
+.mainMenuButton {
+  min-height:58px;
+  border:2px solid #405667;
+  border-radius:9px;
+  background:linear-gradient(180deg, rgba(25,48,63,.92), rgba(8,18,25,.92));
+  color:#d9e3d3;
+  font-family:"Courier New",monospace;
+  font-weight:900;
+  font-size:calc(20px * var(--ui-scale));
+  text-align:left;
+  padding:0 24px;
+  cursor:pointer;
+  box-shadow:0 3px 10px rgba(0,0,0,.6);
+}
+
+.mainMenuButton:hover,
+.mainMenuButton.primary {
+  border-color:#7aa6c5;
+  background:linear-gradient(180deg, rgba(35,75,104,.95), rgba(11,30,45,.95));
+}
+
+.optionsPanel {
+  border:1px solid #405667;
+  border-radius:9px;
+  background:rgba(5,8,6,.82);
+  padding:14px;
+  font-family:"Courier New",monospace;
+  color:#d9e3d3;
+}
+
+.optionsPanel.hidden { display:none; }
+
+.optionsPanel label {
+  display:block;
+  font-size:calc(14px * var(--ui-scale));
+  margin-bottom:10px;
+}
+
+.optionsPanel input {
+  width:100%;
 }

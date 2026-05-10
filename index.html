@@ -8,7 +8,20 @@
 </head>
 <body>
   <main id="gameWrap">
-    <button id="radarBtn" class="mapButton left on">RADAR: WŁ.</button>
+    <div id="startMenu" class="startMenu">
+      <div class="menuShade"></div>
+      <section class="menuPanel">
+        <div class="gameTitle">U-BOOTY<br><span>i NISZCZYCIELE</span></div>
+        <button id="newGameBtn" class="mainMenuButton primary">▶ NOWA GRA</button>
+        <button id="optionsBtn" class="mainMenuButton">⚙ OPCJE</button>
+        <button id="exitBtn" class="mainMenuButton">▣ WYJDŹ Z GRY</button>
+        <div id="optionsPanel" class="optionsPanel hidden">
+          <label>SKALA CZCIONEK UI <span id="fontScaleValue">100%</span></label>
+          <input id="fontScaleSlider" type="range" min="85" max="140" step="5" value="100" />
+        </div>
+      </section>
+    </div>
+
     <button id="windBtn" class="mapButton on">WIATR: WŁ.</button>
     <button id="infoBtn" class="mapButton right on">INFO: WŁ.</button>
     <canvas id="game"></canvas>
@@ -25,7 +38,11 @@
     </section>
 
     <section class="panel">
-      <div class="panelTitle"><span>RADAR</span><span id="radarStatus" class="statusOn">WŁ.</span></div>
+      <div class="panelTitle">
+        <span>RADAR</span>
+        <button id="radarButton" class="tinyButton">WYŁĄCZ</button>
+        <span id="radarStatus" class="statusOn">WŁ.</span>
+      </div>
       <canvas id="radar" class="scopeCanvas"></canvas>
     </section>
 
