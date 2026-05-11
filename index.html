@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>U-Booty i Niszczyciele — v12</title>
+  <title>Attack Bearing: Hunt for Hunters</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -18,38 +18,44 @@
 
   <main id="gameWrap">
     <div id="startMenu" class="startMenu">
-      <div class="menuFooter">Uboat Destroyers, Maciej Dąbrowski, 2026, v. 0.39</div>
+      <div class="brandTitleBlock"><div class="gameTitle">Attack Bearing</div><div class="gameSubtitle">Hunt for Hunters</div></div>
+      <div class="menuFooter">Attack Bearing: Hunt for Hunters, Maciej Dąbrowski, 2026, v. 0.73</div>
       <div class="menuShade"></div>
       <section class="menuPanel">
-        <button id="resumeGameBtn" class="hidden mainMenuButton primary">↩ POWRÓĆ DO GRY</button>
-        <button id="newGameBtn" class="mainMenuButton">▶ NOWA GRA</button>
-        <button id="tutorialBtn" class="mainMenuButton">▣ TUTORIAL</button>
-        <button id="optionsBtn" class="mainMenuButton">⚙ OPCJE</button>
-        <button id="exitBtn" class="mainMenuButton">▣ ZAKOŃCZ GRĘ</button>
+        <button id="resumeGameBtn" class="hidden mainMenuButton primary"><span class="menuIcon">↩</span><span>POWRÓĆ DO GRY</span></button>
+        <button id="newGameBtn" class="mainMenuButton"><span class="menuIcon">▶</span><span>NOWA GRA</span></button>
+        <button id="tutorialBtn" class="mainMenuButton"><span class="menuIcon">▣</span><span>TUTORIAL</span></button>
+        <button id="optionsBtn" class="mainMenuButton"><span class="menuIcon">⚙</span><span>OPCJE</span></button>
+        <button id="exitBtn" class="hidden" style="display:none" aria-hidden="true" tabindex="-1"></button>
 
-<div id="tutorialPanel" class="tutorialPanel hidden">
+        <div id="tutorialPanel" class="tutorialPanel hidden">
           <label class="captainNameLabel">IMIĘ / PSEUDONIM KAPITANA</label>
           <input id="captainNameInput" class="captainNameInput" type="text" placeholder="np. Nowak, Anna, Wilk" maxlength="24" />
           <div class="tutorialTitle">TUTORIAL</div>
-          <button id="trainingMission1Btn" class="trainingMissionBtn">1. Mapa i oznaczenia</button>
-          <button id="trainingMission2Btn" class="trainingMissionBtn">2. Sterowanie okrętem</button>
-          <button id="trainingMission3Btn" class="trainingMissionBtn">3. Obsługa broni</button>
+          <button id="trainingMissionIntroBtn" class="trainingMissionBtn" onclick="window.startTutorialMissionV69(0)">0. Wprowadzenie — Hunt for Hunters</button>
+          <button id="trainingMission1Btn" class="trainingMissionBtn" onclick="window.startTutorialMissionV69(1)">1. Interfejs</button>
+          <button id="trainingMission2Btn" class="trainingMissionBtn" onclick="window.startTutorialMissionV69(2)">2. Mapa</button>
+          <button id="trainingMission3Btn" class="trainingMissionBtn" onclick="window.startTutorialMissionV69(3)">3. Sterowanie okrętem</button>
         </div>
 
         <div id="optionsPanel" class="optionsPanel hidden">
           <label>SKALA CZCIONEK UI <span id="fontScaleValue">150%</span></label>
           <input id="fontScaleSlider" type="range" min="85" max="200" step="5" value="150" />
-          <div class="optionChecks">
+<div class="optionChecks">
             <label><input id="weatherToggle" type="checkbox" checked /> POGODA: WŁ.</label>
             <label><input id="aircraftToggle" type="checkbox" checked /> SAMOLOTY: WŁ.</label>
-          </div></section>
+            <label><input id="convoyToggle" type="checkbox" checked /> KONWÓJ: WŁ.</label>
+          </div>
+        </div>
+      </section>
     </div>
     <div id="mapMenuBar" class="mapMenuBar">
       <button id="menuBtn" class="mapButtonBar">MENU</button>
-      <button id="shipResourceBtn" class="mapButtonBar">FLETCHER</button>
+      <button id="shipResourceBtn" class="mapButtonBar">ZASOBY</button>
+      <button id="battleAlertBtn" class="mapButtonBar" onclick="document.body.classList.toggle('battleAlert'); this.classList.toggle('active'); this.classList.toggle('on');">ALARM</button>
     </div>
     <div id="timeControls" class="timeControls">
-      <span id="dayNightRead">DZIEŃ 12:00</span>
+      <span id="dayNightRead">DZIEŃ 12:00</span><span id="celestialRead" class="celestialRead">☀︎</span>
       <button id="pauseTimeBtn">PAUZA</button>
       <button id="timeHalfBtn">0.5×</button>
       <button id="time1Btn">1×</button>
@@ -88,27 +94,12 @@
           </g>
           <text x="875" y="142" font-family="Courier New" font-size="34" fill="#dfe8e0">445</text>
         </svg></div>
-        <div id="resourceRead" class="resourceRead"></div>
-        <div id="depthChargePanel" class="depthChargePanel">
-          <div class="dcTitle">BOMBY GŁĘBINOWE</div>
-          <div class="dcGrid">
-            <button id="dcLeftBtn" class="dcButton">LEWA K-GUN</button>
-            <button id="dcRightBtn" class="dcButton">PRAWA K-GUN</button>
-            <button id="dcSternBtn" class="dcButton">TYLNE RACKI</button>
-          </div>
-          <div class="dcGrid">
-            <button id="dcShallowBtn" class="dcButton">PŁYTKO 30 m</button>
-            <button id="dcMediumBtn" class="dcButton">ŚREDNIO 90 m</button>
-            <button id="dcDeepBtn" class="dcButton">GŁĘBOKO 180 m</button>
-          </div>
-          <div id="dcRead" class="dcRead">Aktywna broń: działa 5”/38</div>
-        </div>
-      </div>
+        <div id="resourceRead" class="resourceRead"></div></div>
     </div>
     <div id="mapToggleCluster" class="mapToggleCluster">
-      <button id="infoBtn" class="mapButtonBar on">INFO: WŁ.</button>
-      <button id="seaBtn" class="mapButtonBar on">FALE: WŁ.</button>
-      <button id="windBtn" class="mapButtonBar on">WIATR: WŁ.</button>
+      <button id="infoBtn" class="mapButtonBar on">INFO WŁ</button>
+      <button id="seaBtn" class="mapButtonBar on">FALE WŁ</button>
+      <button id="windBtn" class="mapButtonBar on">WIATR WŁ</button>
     </div>
 
     <div id="tutorialPrompt" class="tutorialPrompt hidden">
@@ -120,6 +111,7 @@
       </div>
     </div>
     <canvas id="game"></canvas>
+    <canvas id="sonarOverlay"></canvas>
   </main>
 
   <aside>
